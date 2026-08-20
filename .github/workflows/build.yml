@@ -87,9 +87,11 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
 
-      # compileSdk 36 is required by flutter_plugin_android_lifecycle. minSdk is pinned
-      # explicitly because google_mlkit_text_recognition documents minSdkVersion 21 — a
-      # change to the Flutter default must not be able to lower it silently.
+      # compileSdk 37 is required by flutter_secure_storage (compileSdk is backward
+      # compatible, so this also covers flutter_plugin_android_lifecycle's compileSdk 36).
+      # minSdk is pinned explicitly because google_mlkit_text_recognition documents
+      # minSdkVersion 21 — a change to the Flutter default must not be able to lower it
+      # silently.
       - name: Patch build.gradle.kts (compileSdk, minSdk)
         shell: python3 {0}
         run: |
@@ -97,12 +99,12 @@ jobs:
           with open(path) as f:
               content = f.read()
           content = content.replace(
-              'compileSdk = flutter.compileSdkVersion', 'compileSdk = 36', 1)
+              'compileSdk = flutter.compileSdkVersion', 'compileSdk = 37', 1)
           content = content.replace(
               'minSdk = flutter.minSdkVersion', 'minSdk = 21', 1)
           with open(path, 'w') as f:
               f.write(content)
-          print('Patched compileSdk = 36, minSdk = 21')
+          print('Patched compileSdk = 37, minSdk = 21')
 
       - name: Write release keystore and key.properties
         if: env.KEYSTORE_B64 != ''

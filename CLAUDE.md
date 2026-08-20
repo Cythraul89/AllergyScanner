@@ -249,9 +249,29 @@ green afterwards):
   (via `ldconfig -p`) is enough for `NativeDatabase.memory()`; no extra
   install needed on a plain Ubuntu machine.
 
-Expected but **still not yet verified** — no native Android/iOS build has run
-yet, only `flutter create`'s scaffolding plus the pure-Dart/Flutter-host
-verification loop above. Check these first when a real device/CI build fails:
+Confirmed failure, fix applied but not yet re-run in CI, 2026-08-20:
+
+- **`compileSdk = 36` pin went stale — `flutter_secure_storage` now requires
+  37** — `build.yml`'s Gradle patch pinned `compileSdk = 36` for
+  `flutter_plugin_android_lifecycle`; the installed `flutter_secure_storage`
+  version needs `compileSdk` 37 or higher, and CI's `assembleRelease` failed at
+  `:app:checkReleaseAarMetadata` with "Dependency ':flutter_secure_storage'
+  requires... version 37". Fixed by bumping the patch to `compileSdk = 37`
+  (compileSdk is backward-compatible, so this still covers the lifecycle
+  plugin's 36 requirement) — not yet re-verified by a green CI run, and no
+  local Android SDK is set up on this machine to test it directly (the stub at
+  `/usr/lib/android-sdk` has no platforms or `sdkmanager`).
+- **`mobile_scanner` applies its own Kotlin Gradle Plugin** — CI logs a
+  non-fatal warning ("Future versions of Flutter will fail to build if your
+  app uses plugins that apply KGP"). Not yet blocking; if a future Flutter
+  upgrade turns this fatal, check `mobile_scanner`'s changelog for a
+  built-in-Kotlin release before assuming this project's own Gradle config
+  broke.
+
+Expected but **still not yet verified** — no native Android/iOS build has
+succeeded yet, only `flutter create`'s scaffolding plus the pure-Dart/Flutter-
+host verification loop above. Check these first when a real device/CI build
+fails:
 
 - **iOS deployment target** — `google_mlkit_text_recognition` 0.17.1 documents a
   minimum deployment target of 15.5 and Xcode ≥ 15.3. The Flutter template
