@@ -249,7 +249,8 @@ green afterwards):
   (via `ldconfig -p`) is enough for `NativeDatabase.memory()`; no extra
   install needed on a plain Ubuntu machine.
 
-Confirmed failure, fix applied but not yet re-run in CI, 2026-08-20:
+Confirmed by CI, 2026-08-20 (Android release build, second attempt — first
+attempt fixed the compileSdk error below, second attempt hit R8):
 
 - **`compileSdk = 36` pin went stale — `flutter_secure_storage` now requires
   37** — `build.yml`'s Gradle patch pinned `compileSdk = 36` for
@@ -258,9 +259,20 @@ Confirmed failure, fix applied but not yet re-run in CI, 2026-08-20:
   `:app:checkReleaseAarMetadata` with "Dependency ':flutter_secure_storage'
   requires... version 37". Fixed by bumping the patch to `compileSdk = 37`
   (compileSdk is backward-compatible, so this still covers the lifecycle
-  plugin's 36 requirement) — not yet re-verified by a green CI run, and no
-  local Android SDK is set up on this machine to test it directly (the stub at
-  `/usr/lib/android-sdk` has no platforms or `sdkmanager`).
+  plugin's 36 requirement). Confirmed: this specific error is gone from the
+  next CI run (it got further, to R8, below).
+- **R8 fails on ML Kit's unused per-script recognizer classes** — CI's
+  `:app:minifyReleaseWithR8` failed with "Missing class
+  com.google.mlkit.vision.text.{chinese,devanagari,japanese,korean}...
+  (referenced from ... TextRecognizer.initialize)". `google_mlkit_text_recognition`'s
+  core `TextRecognizer` references these optional per-script classes, which
+  only exist if their separate sub-packages are added; this app only uses the
+  default script, so they're legitimately absent. Fixed by a new `build.yml`
+  step appending `-dontwarn com.google.mlkit.vision.text.<script>.**` (chinese,
+  devanagari, japanese, korean) to `android/app/proguard-rules.pro` — not yet
+  re-verified by a green CI run, and still no local Android SDK on this
+  machine to test it directly (the stub at `/usr/lib/android-sdk` has no
+  platforms or `sdkmanager`).
 - **`mobile_scanner` applies its own Kotlin Gradle Plugin** — CI logs a
   non-fatal warning ("Future versions of Flutter will fail to build if your
   app uses plugins that apply KGP"). Not yet blocking; if a future Flutter

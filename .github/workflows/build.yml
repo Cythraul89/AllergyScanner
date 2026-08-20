@@ -106,6 +106,30 @@ jobs:
               f.write(content)
           print('Patched compileSdk = 37, minSdk = 21')
 
+      # google_mlkit_text_recognition's core TextRecognizer references the optional
+      # per-script recognizer classes (Chinese, Devanagari, Japanese, Korean), which only
+      # exist if their separate sub-packages are added. This app only uses the default
+      # script recognizer, so R8 needs telling those classes are legitimately absent, or
+      # release minification fails with "Missing class" errors.
+      - name: Patch proguard-rules.pro (ML Kit optional scripts)
+        shell: python3 {0}
+        run: |
+          path = 'android/app/proguard-rules.pro'
+          rule = (
+              '-dontwarn com.google.mlkit.vision.text.chinese.**\n'
+              '-dontwarn com.google.mlkit.vision.text.devanagari.**\n'
+              '-dontwarn com.google.mlkit.vision.text.japanese.**\n'
+              '-dontwarn com.google.mlkit.vision.text.korean.**\n'
+          )
+          try:
+              with open(path) as f:
+                  content = f.read()
+          except FileNotFoundError:
+              content = ''
+          with open(path, 'w') as f:
+              f.write(content + rule)
+          print('Added -dontwarn rules for unused ML Kit script recognizers')
+
       - name: Write release keystore and key.properties
         if: env.KEYSTORE_B64 != ''
         env:
