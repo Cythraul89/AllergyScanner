@@ -1,0 +1,71 @@
+name: allergy_scanner
+description: Check product ingredients against your own allergy list, offline.
+publish_to: 'none'
+version: 0.1.0+1
+
+# mobile_scanner 7.x requires Dart ^3.7.0 / Flutter >=3.29.0, so the house-style
+# constraint '>=3.3.0 <4.0.0' is not satisfiable for this app.
+environment:
+  sdk: ^3.7.0
+  flutter: '>=3.29.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management (manual providers — no code generation).
+  # Pinned to Riverpod 2 per the house style; 3.x exists and moves StateProvider
+  # to a legacy import, so migrating is a separate, deliberate change.
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^17.5.0
+
+  # Local database. sqlite3_flutter_libs is end-of-life as of 0.6.0+eol;
+  # drift_flutter is the current documented way to open a Drift database.
+  drift: ^2.34.3
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
+  path: ^1.9.1
+
+  # HTTP client (Open Food Facts, WebDAV)
+  dio: ^5.11.0
+
+  # Barcode scanning — Android, iOS, macOS
+  mobile_scanner: ^7.4.0
+
+  # On-device text recognition — Android, iOS only
+  google_mlkit_text_recognition: ^0.17.1
+
+  # Photo for text recognition (system camera UI, no in-app preview)
+  image_picker: ^1.2.3
+
+  # Secure storage (WebDAV password only)
+  flutter_secure_storage: ^11.0.0
+
+  # Local backup (export / import) and sharing
+  archive: ^4.1.0
+  file_picker: ^12.0.0
+  share_plus: ^13.3.0
+
+  # App version (About screen)
+  package_info_plus: ^10.2.1
+
+  # Open URLs in the device browser
+  url_launcher: ^6.3.2
+
+  # Utilities
+  uuid: ^4.6.0
+  intl: ^0.20.3
+  crypto: ^3.0.7
+  equatable: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.34.5
+  build_runner: ^2.16.0
+
+flutter:
+  uses-material-design: true

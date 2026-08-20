@@ -1,0 +1,62 @@
+# Branch/PR pipeline. Contains NO build steps: the gate runs here, the builds come from
+# the reusable build.yml (Android · iOS, each debug + release).
+# Version stamp: <pubspec version>-dev, build number = run number.
+name: Flutter CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Gate: analyse + test, and derive the version stamp ──────────────────────
+  analyze:
+    name: Analyse & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install pub dependencies
+        run: flutter pub get
+      - name: Generate Drift code
+        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Static analysis
+        run: flutter analyze --fatal-infos
+      - name: Unit tests
+        run: flutter test
+      - name: Derive version stamp
+        id: version
+        run: |
+          BASE=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
+          echo "version=${BASE}-dev" >> "$GITHUB_OUTPUT"
+
+  # ── All platforms, both modes — one shared definition ───────────────────────
+  build:
+    name: Build
+    needs: analyze
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.analyze.outputs.version }}
+      retention-days: 14

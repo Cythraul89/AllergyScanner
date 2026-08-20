@@ -1,0 +1,291 @@
+# Reusable build workflow — the SINGLE definition of how AllergyScanner is built.
+# Called by ci.yml (branch pushes) and release.yml (version tags); those two differ only in
+# trigger, version string and what happens with the artifacts. Never duplicate a build step
+# into a caller — change it here.
+#
+# Matrix: Android · iOS  ×  debug + release.
+# Artifact names: AllergyScanner-<version>-<mode>-<platform>[-<arch>].<ext>
+#
+# macOS, Windows and Linux are deliberately NOT built: google_mlkit_text_recognition
+# supports no desktop platform and mobile_scanner supports only macOS, so a desktop build
+# would ship without one or both scanning features. This is a recorded project decision —
+# see README "Platforms" and doc/REQUIREMENTS.md §3, not an omission.
+#
+# NOT build-verified: no Flutter SDK has ever run against this repository.
+# Action SHAs are pinned — re-pin deliberately.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Build name, e.g. 0.1.0-dev or 1.0.0 (without a leading v)'
+        required: true
+        type: string
+      retention-days:
+        description: 'Artifact retention in days'
+        required: false
+        default: 14
+        type: number
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+defaults:
+  run:
+    working-directory: src
+
+jobs:
+  # ── Android (.apk) ──────────────────────────────────────────────────────────
+  # A release build needs no secrets: the Flutter template signs the release buildType
+  # with the debug key. When the keystore secrets exist, the real signing config is
+  # injected for BOTH buildTypes. KEYSTORE_B64 is a job-level env var on purpose — a
+  # step's own env block is not visible to that step's `if:` condition.
+  android:
+    name: Android (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release]
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Scaffold Android platform
+        run: flutter create --platforms=android .
+
+      # CAMERA: barcode scanning (mobile_scanner) and the photo for text recognition
+      # (image_picker). INTERNET: Open Food Facts and WebDAV.
+      - name: Patch AndroidManifest (permissions)
+        shell: python3 {0}
+        run: |
+          path = 'android/app/src/main/AndroidManifest.xml'
+          with open(path) as f:
+              content = f.read()
+          for perm in [
+              'android.permission.INTERNET',
+              'android.permission.CAMERA',
+          ]:
+              if perm not in content:
+                  content = content.replace(
+                      '    <application',
+                      f'    <uses-permission android:name="{perm}"/>\n    <application',
+                      1,
+                  )
+                  print(f'Added permission: {perm}')
+          with open(path, 'w') as f:
+              f.write(content)
+
+      # compileSdk 36 is required by flutter_plugin_android_lifecycle. minSdk is pinned
+      # explicitly because google_mlkit_text_recognition documents minSdkVersion 21 — a
+      # change to the Flutter default must not be able to lower it silently.
+      - name: Patch build.gradle.kts (compileSdk, minSdk)
+        shell: python3 {0}
+        run: |
+          path = 'android/app/build.gradle.kts'
+          with open(path) as f:
+              content = f.read()
+          content = content.replace(
+              'compileSdk = flutter.compileSdkVersion', 'compileSdk = 36', 1)
+          content = content.replace(
+              'minSdk = flutter.minSdkVersion', 'minSdk = 21', 1)
+          with open(path, 'w') as f:
+              f.write(content)
+          print('Patched compileSdk = 36, minSdk = 21')
+
+      - name: Write release keystore and key.properties
+        if: env.KEYSTORE_B64 != ''
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/release.keystore
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=../release.keystore
+          EOF
+
+      # Both buildTypes point at the release signing config, so debug and release
+      # artifacts share one key (an ephemeral per-runner debug key makes debug builds
+      # non-upgradable on a test device).
+      - name: Inject signing config
+        if: env.KEYSTORE_B64 != ''
+        shell: python3 {0}
+        run: |
+          path = 'android/app/build.gradle.kts'
+          with open(path) as f:
+              gradle = f.read()
+          nl = '\n'
+          header = (
+              'import java.util.Properties' + nl +
+              'import java.io.FileInputStream' + nl + nl +
+              'val keystoreProps = Properties().apply {' + nl +
+              '    val f = rootProject.file("key.properties")' + nl +
+              '    if (f.exists()) load(FileInputStream(f))' + nl +
+              '}' + nl + nl
+          )
+          signing = (
+              nl +
+              '    signingConfigs {' + nl +
+              '        create("release") {' + nl +
+              '            keyAlias      = keystoreProps["keyAlias"]      as String' + nl +
+              '            keyPassword   = keystoreProps["keyPassword"]   as String' + nl +
+              '            storeFile     = file(keystoreProps["storeFile"] as String)' + nl +
+              '            storePassword = keystoreProps["storePassword"] as String' + nl +
+              '        }' + nl +
+              '    }' + nl
+          )
+          debug_override = (
+              nl + '        debug {' + nl +
+              '            signingConfig = signingConfigs.getByName("release")' + nl +
+              '        }'
+          )
+          gradle = header + gradle
+          gradle = gradle.replace(
+              '    buildTypes {', signing + '    buildTypes {' + debug_override, 1)
+          gradle = gradle.replace(
+              'signingConfig = signingConfigs.getByName("debug")',
+              'signingConfig = signingConfigs.getByName("release")', 1)
+          with open(path, 'w') as f:
+              f.write(gradle)
+          print('Injected release signing config for both buildTypes')
+
+      - name: Build APK (${{ matrix.mode }})
+        run: |
+          flutter build apk --${{ matrix.mode }} \
+            --build-name="${{ inputs.version }}" \
+            --build-number=${{ github.run_number }}
+          cp "build/app/outputs/flutter-apk/app-${{ matrix.mode }}.apk" \
+            "AllergyScanner-${{ inputs.version }}-${{ matrix.mode }}-android.apk"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allergy-scanner-android-${{ matrix.mode }}
+          path: src/AllergyScanner-*-android.apk
+          retention-days: ${{ inputs.retention-days }}
+
+  # ── iOS (.app zip, unsigned) ────────────────────────────────────────────────
+  # CI has no provisioning profile, so both modes build with --no-codesign. The result is
+  # a Runner.app bundle, NOT an installable .ipa — it cannot be side-loaded without
+  # re-signing. Its purpose is to prove the iOS target compiles.
+  ios:
+    name: iOS (${{ matrix.mode }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [debug, release]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Scaffold iOS platform
+        run: flutter create --platforms=ios .
+
+      # A missing usage description is an App Store rejection and a runtime crash the
+      # first time the camera or the library is opened.
+      - name: Patch Info.plist (usage descriptions)
+        shell: python3 {0}
+        run: |
+          path = 'ios/Runner/Info.plist'
+          keys = {
+              'NSCameraUsageDescription':
+                  'AllergyScanner uses the camera to scan barcodes and to photograph '
+                  'ingredient lists. Images are processed on your device and are not stored.',
+              'NSPhotoLibraryUsageDescription':
+                  'AllergyScanner reads an ingredient list from an image you select. '
+                  'The image is processed on your device and is not stored.',
+          }
+          with open(path) as f:
+              content = f.read()
+          for key, text in keys.items():
+              if key not in content:
+                  content = content.replace(
+                      '</dict>',
+                      f'\t<key>{key}</key>\n\t<string>{text}</string>\n</dict>', 1)
+                  print(f'Added {key}')
+          with open(path, 'w') as f:
+              f.write(content)
+
+      # google_mlkit_text_recognition 0.17.1 documents a minimum iOS deployment target of
+      # 15.5; the Flutter template generates a lower one, which fails at `pod install`.
+      - name: Patch iOS deployment target (15.5)
+        shell: python3 {0}
+        run: |
+          import re
+          podfile = 'ios/Podfile'
+          with open(podfile) as f:
+              content = f.read()
+          content = re.sub(r"#\s*platform :ios.*", "platform :ios, '15.5'", content, count=1)
+          if 'platform :ios' not in content:
+              content = "platform :ios, '15.5'\n" + content
+          else:
+              content = re.sub(r"platform :ios, '[\d.]+'", "platform :ios, '15.5'",
+                               content, count=1)
+          with open(podfile, 'w') as f:
+              f.write(content)
+
+          project = 'ios/Runner.xcodeproj/project.pbxproj'
+          with open(project) as f:
+              proj = f.read()
+          proj = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;',
+                        'IPHONEOS_DEPLOYMENT_TARGET = 15.5;', proj)
+          with open(project, 'w') as f:
+              f.write(proj)
+          print('iOS deployment target set to 15.5')
+
+      - name: Build iOS (${{ matrix.mode }}, unsigned)
+        run: |
+          flutter build ios --${{ matrix.mode }} --no-codesign \
+            --build-name="${{ inputs.version }}" \
+            --build-number=${{ github.run_number }}
+          # The output directory differs between modes and Flutter versions
+          # (build/ios/iphoneos vs build/ios/<Mode>-iphoneos) — locate it, don't hardcode.
+          APP=$(find build/ios -maxdepth 3 -type d -name 'Runner.app' | head -1)
+          test -n "$APP" || { echo 'Runner.app not found'; find build/ios -maxdepth 3; exit 1; }
+          ditto -c -k --sequesterRsrc --keepParent "$APP" \
+            "AllergyScanner-${{ inputs.version }}-${{ matrix.mode }}-ios-unsigned.zip"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: allergy-scanner-ios-${{ matrix.mode }}
+          path: src/AllergyScanner-*-ios-unsigned.zip
+          retention-days: ${{ inputs.retention-days }}
+
+  # ── SBOM ────────────────────────────────────────────────────────────────────
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve pub dependencies
+        run: flutter pub get
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ./src
+          format: cyclonedx-json
+          artifact-name: allergy-scanner-sbom.cdx.json
+          output-file: allergy-scanner-sbom.cdx.json
+          upload-release-assets: false
