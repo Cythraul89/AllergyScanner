@@ -31,6 +31,22 @@ class Scans extends Table {
   /// Denormalised count of the related `scan_matches` rows.
   IntColumn get matchCount => integer().withDefault(const Constant(0))();
 
+  /// User-entered custom label, set after the fact via "Edit details" —
+  /// distinct from [productNameSnapshot], which is frozen at scan time from
+  /// product data.
+  TextColumn get name => text().nullable()();
+
+  /// Free text. History groups scans that share the same value (§7.4,
+  /// R7.12). Purely a label the user typed — no shops table, no
+  /// normalisation.
+  TextColumn get shop => text().nullable()();
+
+  /// Relative path under the app documents dir to a user-attached photo
+  /// (`ScanPhotoService`), e.g. `scan_photos/<id>.jpg`. Set only via "Edit
+  /// details", never at scan time — unrelated to the OCR capture photo,
+  /// which is never persisted (N10 / N10a).
+  TextColumn get photoPath => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

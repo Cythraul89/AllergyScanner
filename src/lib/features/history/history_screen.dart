@@ -103,6 +103,16 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
+/// A shop-group header, distinct from the day-header `String` rows so the
+/// list's `is String` check keeps unambiguously matching day headers.
+class ShopHeader {
+  const ShopHeader(this.label);
+
+  final String label;
+}
+
+const String _ungroupedShopLabel = 'Ungrouped';
+
 class _HistoryList extends ConsumerWidget {
   const _HistoryList({required this.scans});
 
@@ -110,7 +120,7 @@ class _HistoryList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final List<Object> rows = _withDayHeaders(scans);
+    final List<Object> rows = withShopGroups(scans);
 
     return ListView.builder(
       itemCount: rows.length + 1,
@@ -126,6 +136,15 @@ class _HistoryList extends ConsumerWidget {
         }
 
         final Object row = rows[index];
+        if (row is ShopHeader) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+            child: Text(
+              row.label,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          );
+        }
         if (row is String) {
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -155,13 +174,22 @@ class _HistoryList extends ConsumerWidget {
           child: ListTile(
             leading: VerdictBadge(verdict: scan.verdict),
             title: Text(
-              scan.productNameSnapshot ?? scan.barcode ?? 'text scan',
+              scan.name ?? scan.productNameSnapshot ?? scan.barcode ?? 'text scan',
             ),
             subtitle: Text(
               '${Formatters.matchCountLabel(scan.matchCount)} · '
               '${Formatters.inputModeLabel(scan.inputMode)}',
             ),
-            trailing: Text(Formatters.time(scan.scannedAt)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (scan.photoPath != null) ...<Widget>[
+                  const Icon(Icons.photo_outlined, size: 16),
+                  const SizedBox(width: 4),
+                ],
+                Text(Formatters.time(scan.scannedAt)),
+              ],
+            ),
             onTap: () => context.go('/history/${scan.id}'),
           ),
         );
@@ -169,18 +197,52 @@ class _HistoryList extends ConsumerWidget {
     );
   }
 
-  /// Day headers interleaved with the scans, so one flat list renders both.
-  static List<Object> _withDayHeaders(List<Scan> scans) {
-    final List<Object> rows = <Object>[];
-    String? currentDay;
-    for (final Scan scan in scans) {
-      final String day = Formatters.dayHeader(scan.scannedAt);
-      if (day != currentDay) {
-        currentDay = day;
-        rows.add(day);
-      }
-      rows.add(scan);
-    }
-    return rows;
+}
+
+/// Shop headers interleaved with day-headers-within-shop, so scans sharing a
+/// `shop` value are grouped together (§4, R7.12). Groups are ordered by
+/// their own most-recent scan, so a shop visited five minutes ago sorts
+/// above one not visited in months — "Ungrouped" needs no special-casing
+/// under this rule. Pure transform over the already-fetched, already
+/// reverse-chronological list — no new query. Top-level (not a method on
+/// the private `_HistoryList`) so it is unit-testable without a widget pump.
+@visibleForTesting
+List<Object> withShopGroups(List<Scan> scans) {
+  final Map<String, List<Scan>> byShop = <String, List<Scan>>{};
+  for (final Scan scan in scans) {
+    final String? shop = scan.shop?.trim();
+    final String key = (shop == null || shop.isEmpty)
+        ? _ungroupedShopLabel
+        : shop;
+    (byShop[key] ??= <Scan>[]).add(scan);
   }
+
+  final List<String> orderedKeys = byShop.keys.toList()
+    ..sort(
+      (String a, String b) =>
+          byShop[b]!.first.scannedAt.compareTo(byShop[a]!.first.scannedAt),
+    );
+
+  final List<Object> rows = <Object>[];
+  for (final String key in orderedKeys) {
+    rows.add(ShopHeader(key));
+    rows.addAll(withDayHeaders(byShop[key]!));
+  }
+  return rows;
+}
+
+/// Day headers interleaved with the scans, so one flat list renders both.
+@visibleForTesting
+List<Object> withDayHeaders(List<Scan> scans) {
+  final List<Object> rows = <Object>[];
+  String? currentDay;
+  for (final Scan scan in scans) {
+    final String day = Formatters.dayHeader(scan.scannedAt);
+    if (day != currentDay) {
+      currentDay = day;
+      rows.add(day);
+    }
+    rows.add(scan);
+  }
+  return rows;
 }

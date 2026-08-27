@@ -19,6 +19,7 @@ AllergenTerm buildTerm({
   required String normalizedTerm,
   bool isActive = true,
   String? note,
+  String? groupId,
 }) {
   return AllergenTerm(
     id: id,
@@ -26,6 +27,7 @@ AllergenTerm buildTerm({
     normalizedTerm: normalizedTerm,
     isActive: isActive,
     note: note,
+    groupId: groupId,
     createdAt: testTimestamp,
     updatedAt: testTimestamp,
   );
@@ -60,6 +62,9 @@ Scan buildScan({
   int matchCount = 1,
   String evaluatedText = 'sugar, hazelnuts, milk',
   ScanInputMode inputMode = ScanInputMode.barcode,
+  String? name,
+  String? shop,
+  String? photoPath,
 }) {
   return Scan(
     id: id,
@@ -70,6 +75,9 @@ Scan buildScan({
     evaluatedText: evaluatedText,
     verdict: verdict,
     matchCount: matchCount,
+    name: name,
+    shop: shop,
+    photoPath: photoPath,
   );
 }
 

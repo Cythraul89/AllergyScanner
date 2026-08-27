@@ -15,6 +15,7 @@ class AllergenTerm extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.note,
+    this.groupId,
   });
 
   final String id;
@@ -22,6 +23,11 @@ class AllergenTerm extends Equatable {
   final String normalizedTerm;
   final bool isActive;
   final String? note;
+
+  /// `null` = ungrouped. Changed only through `AllergenTermDao.setGroup`, not
+  /// through [copyWith] — same shape as [note] clearing going through
+  /// `updateTerm`, not `copyWith`.
+  final String? groupId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -38,6 +44,7 @@ class AllergenTerm extends Equatable {
       normalizedTerm: normalizedTerm ?? this.normalizedTerm,
       isActive: isActive ?? this.isActive,
       note: note ?? this.note,
+      groupId: groupId,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -50,6 +57,7 @@ class AllergenTerm extends Equatable {
     normalizedTerm,
     isActive,
     note,
+    groupId,
     createdAt,
     updatedAt,
   ];

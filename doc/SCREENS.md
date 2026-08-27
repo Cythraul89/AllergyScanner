@@ -207,6 +207,37 @@ exists and the widget test covers it [R3.1].
 
 ## 5. OCR review / manual text entry
 
+Two states, both below the same editable field: a marker was found (a
+preview appears) or it was not (a warning appears, and `Check` is disabled).
+
+```
+┌────────────────────────────────────────┐
+│ ← Check ingredient text                │
+├────────────────────────────────────────┤
+│  Recognised text — correct it if needed│
+│  ┌──────────────────────────────────┐  │
+│  │ Ingredients: sugar, cocoa butter,│  │
+│  │ HAZELNUTS, skimmed milk powder,  │  │
+│  │ soy lecithin (E322), natural     │  │
+│  │ vanilla flavouring               │  │
+│  │                                  │  │
+│  └──────────────────────────────────┘  │
+│  ⌸ Re-scan                             │
+│                                        │
+│  ┌ Ingredients section detected ───┐  │
+│  │ 1 term(s) matched.               │  │
+│  │ sugar, cocoa butter, [HAZELNUTS],│  │
+│  │ skimmed milk powder, soy         │  │
+│  │ lecithin (E322), natural vanilla │  │
+│  │ flavouring                       │  │
+│  │ This is a preview. The full text │  │
+│  │ is checked again when you tap    │  │
+│  │ Check.                           │  │
+│  └──────────────────────────────────┘  │
+│           [    Check    ]              │
+└────────────────────────────────────────┘
+```
+
 ```
 ┌────────────────────────────────────────┐
 │ ← Check ingredient text                │
@@ -214,14 +245,16 @@ exists and the widget test covers it [R3.1].
 │  Recognised text — correct it if needed│
 │  ┌──────────────────────────────────┐  │
 │  │ sugar, cocoa butter, HAZELNUTS,  │  │
-│  │ skimmed milk powder, soy         │  │
-│  │ lecithin (E322), natural         │  │
-│  │ vanilla flavouring               │  │
-│  │                                  │  │
+│  │ skimmed milk powder              │  │
 │  └──────────────────────────────────┘  │
-│  ⌸ Re-scan          ⎘ Paste            │
+│  ⌸ Re-scan                             │
 │                                        │
-│           [    Check    ]              │
+│  ⓘ No ingredients marker found. Add a  │
+│    heading such as "Ingredients:" (or  │
+│    "Zutaten:", "Ingrédients:",         │
+│    "Ingredienti:") before the list,    │
+│    then try again — or re-scan.        │
+│           [    Check    ] (disabled)   │
 └────────────────────────────────────────┘
 ```
 
@@ -231,10 +264,20 @@ exists and the widget test covers it [R3.1].
   for recognition errors, not a re-scan.
 - Multiline, grows to 16 lines, keyboard `newline` action. Pasting uses the
   platform's own text selection controls — there is no separate paste button.
-- `Check` is disabled while the field is empty.
+- The field is scanned on every keystroke for a localised `Ingredients:`
+  marker [R5.8]. Found → a live preview of the section from the marker to
+  the end of the field, with matches against the active allergy list
+  highlighted inline, and `Check` enabled. Not found → the warning above,
+  naming all four recognised markers, and `Check` stays disabled [R5.9,
+  R7.12] — this includes an empty field, so the old "disabled while empty"
+  rule is subsumed by this one, not kept alongside it.
+- The preview only scopes what is *shown*; tapping `Check` always evaluates
+  the entire field, unchanged — nothing typed outside the detected section
+  is ever silently excluded from the real check.
 - The same screen serves manual text entry (§6): it is entered with an empty
   initial text, which also selects the recorded input mode (`manualText`
-  instead of `ocr`) and hides `Re-scan`.
+  instead of `ocr`) and hides `Re-scan`. The marker gate applies identically
+  here — a pasted list with no heading is blocked the same way.
 
 ---
 
@@ -281,6 +324,8 @@ Reached from every scan path and from History; identical widget in both
 │ │ ⚠  CONTAINS TERMS FROM YOUR LIST   │ │
 │ │    2 matches                       │ │
 │ └────────────────────────────────────┘ │
+│ 📷 Weekly shop        (when set: R7.13)│
+│    Migros                              │
 │                                        │
 │ Choco Bar · Sweetco · 200 g            │
 │ Open Food Facts, fetched 20 Aug 2026   │
@@ -289,6 +334,7 @@ Reached from every scan path and from History; identical widget in both
 │ ─────────────────────────────────────  │
 │ hazelnut                               │
 │   "…cocoa butter HAZELNUTS skimmed…"   │
+│   Also matched: haselnuss (§4.1a)      │
 │ milk                                   │
 │   "…skimmed MILK powder soy…"          │
 │                                        │
@@ -302,9 +348,50 @@ Reached from every scan path and from History; identical widget in both
 │ This is a text match, not a safety     │
 │ assessment. Always read the packaging. │
 │                                        │
-│ [ Correct product data ]  [ Re-scan ]  │
+│ [Correct product data] [Edit details]  │
+│ [ New scan ]                           │
 └────────────────────────────────────────┘
 ```
+
+The name/shop/photo row and the "Also matched" line only appear when set —
+neither exists on a scan that has not gone through *Edit details* or whose
+matched terms are not grouped.
+
+### Edit details
+
+Reached from the result view's *Edit details* action, for every scan (not
+just barcode ones) — name, shop and a photo, added after the fact (§7.2).
+
+```
+┌────────────────────────────────────────┐
+│ ← Edit details                  [Save] │
+├────────────────────────────────────────┤
+│ Name (optional)                        │
+│ ┌──────────────────────────────────┐   │
+│ │ Weekly shop                      │   │
+│ └──────────────────────────────────┘   │
+│ Shop (optional)                        │
+│ ┌──────────────────────────────────┐   │
+│ │ Migros                           │   │
+│ └──────────────────────────────────┘   │
+│ Scans at the same shop are grouped     │
+│ together                               │
+│                                        │
+│ [Take photo] [Pick an image]           │
+│              [Remove photo]            │
+└────────────────────────────────────────┘
+```
+
+**Behaviour**
+
+- No re-evaluation: saving never touches `evaluatedText` or the verdict
+  [R4.11].
+- The photo picker is the same camera/gallery pattern as §4, but this photo
+  **is** stored on-device until removed — distinct from the OCR capture
+  photo, which never is [N10/N10a].
+- Capture is compressed (max width 1600px, quality 85) — up to 500 history
+  entries could otherwise mean hundreds of multi-MB photos, both on disk and
+  in an in-memory backup archive.
 
 ### Mobile — `noMatch` / `unknown` banners
 
@@ -390,20 +477,24 @@ evaluated text on the right; action buttons in the app bar.
 
 ### Mobile
 
+One collapsible section per group (§4.1a), then ungrouped terms in today's
+flat active/inactive rendering, unchanged.
+
 ```
 ┌────────────────────────────────────────┐
-│ My allergy terms                  [🔍] │
+│ My allergy terms              [📁] [🔍]│
 ├────────────────────────────────────────┤
-│  ACTIVE (7)                            │
+│  Hazelnut                        ›     │
+│    hazelnut                      [●]   │
+│    haselnuss                     [●]   │
+│  Milk                            ›     │
+│    milk                          [●]   │
+│    lait                          [●]   │
+│                                        │
+│  OTHER TERMS                           │
 │  ─────────────────────────────────────  │
-│  hazelnut                        [●]   │
-│  milk                            [●]   │
 │  soy lecithin                    [●]   │
 │    severe                              │
-│  …                                     │
-│                                        │
-│  INACTIVE (2)                          │
-│  ─────────────────────────────────────  │
 │  celery                          [○]   │
 │                                        │
 │                              ( + )     │
@@ -411,6 +502,10 @@ evaluated text on the right; action buttons in the app bar.
 │  Scan  [Allergies]  History  Settings  │
 └────────────────────────────────────────┘
 ```
+
+The `[📁]` AppBar action opens *Add a group*; tapping a group header opens
+*Edit group* (below). Search matches a group's label, any of its members'
+text, or an ungrouped term's text.
 
 ### Add / edit screen
 
@@ -444,6 +539,46 @@ navigation story and a deep link can reach it.
 - Swipe-to-delete with an undo snackbar; deleting never touches history
   [R7.9].
 - Duplicate rejected by normalised form, naming the existing entry [R4.1].
+
+### Group edit screen
+
+`/allergies/groups/add`, `/allergies/groups/:groupId/edit`.
+
+```
+┌────────────────────────────────────────┐
+│ ← Edit group                      [🗑] │
+│  Group name                            │
+│  ┌──────────────────────────────────┐  │
+│  │ Hazelnut                         │  │
+│  └──────────────────────────────────┘  │
+│                                        │
+│  Names in this group                   │
+│  [hazelnut ✕]  [haselnuss ✕]           │
+│  ▾ Attach an existing term             │
+│                                        │
+│  Add a new name                        │
+│  ┌───────────────────────┐  ┌────┐     │
+│  │ noisette               │  │ FR │     │
+│  └───────────────────────┘  └────┘     │
+│  [Add]  [🌐 Suggest translations]      │
+│                                        │
+│         [Cancel]        [Save]         │
+└────────────────────────────────────────┘
+```
+
+**Behaviour**
+
+- The label is not matched and not required to be unique — it is only ever
+  shown as the group header [§4.1a].
+- Removing a name chip ungroups that term (`groupId → null`); it is **never**
+  deleted [R4.1b]. Deleting the whole group (🗑) has the same effect on every
+  member, with a confirmation naming that.
+- *Suggest translations* calls MyMemory for the other three of DE/EN/FR/IT,
+  shown as tappable chips that pre-fill the add field — nothing is ever
+  inserted automatically, every suggestion still goes through the same
+  duplicate/length checks as any other term [R4.1c]. Hidden/disabled with an
+  explanatory line when *Look up products online* is off, exactly like every
+  other online feature [R6.6].
 - Under 3 normalised characters → `Save` stays disabled [R4.2/R5.5].
 - The ⓘ note is required copy, not decoration — it is the user-facing form of
   the §5.4 limitation.
@@ -453,16 +588,21 @@ navigation story and a deep link can reach it.
 
 ## 10. History
 
+Grouped by shop (§4.1a is unrelated — this is `scans.shop`, R7.14), then by
+day within each shop, newest-active shop first.
+
 ```
 ┌────────────────────────────────────────┐
 │ History                     [Filter ▾] │
 ├────────────────────────────────────────┤
+│  Migros                                │
 │  TODAY                                 │
-│  ⚠ Choco Bar 200g                14:02 │
-│     2 matches · barcode                │
+│  ⚠ Weekly shop                   14:02 │
+│     2 matches · barcode         📷     │
 │  ✓ text scan                     09:11 │
 │     0 matches · recognised text        │
 │                                        │
+│  Ungrouped                             │
 │  19 AUG 2026                           │
 │  ? 4001234567890                 18:40 │
 │     not found · barcode                │
@@ -475,12 +615,18 @@ navigation story and a deep link can reach it.
 
 **Behaviour**
 
-- Reverse chronological, grouped by day; filter by verdict [R7.10].
+- Grouped by shop, each group's own scans reverse-chronological by day
+  within it; filter by verdict [R7.10, R7.14]. Every existing scan has no
+  `shop` value until the user starts using it, so this is visually one added
+  header line for anyone not yet using the field, not a reordering.
+- The row title prefers the scan's own name, then the product name, then the
+  barcode, then falls back to "text scan"; a 📷 marks a scan with an
+  attached photo [R7.13].
 - Opens the stored result view with **no** network access — `evaluatedText`,
   `productNameSnapshot` and `termSnapshot` make each entry self-contained
   [R4.7].
-- Swipe-to-delete a single entry; app-bar overflow offers `Clear history`
-  behind a confirmation.
+- Swipe-to-delete a single entry (also deletes its attached photo, if any,
+  R4.12); app-bar overflow offers `Clear history` behind a confirmation.
 - The retention line states the cap of 500 [R4.8].
 - Desktop: master/detail — list left, result right.
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/calculators/allergen_matcher.dart';
 import '../../core/calculators/text_normalizer.dart';
+import '../../core/models/allergen_term.dart';
 import '../../core/models/enums.dart';
 import '../../core/models/product.dart';
 import '../../core/models/scan.dart';
@@ -13,6 +16,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/utils/scan_capabilities.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/verdict_banner.dart';
+import '../history/history_providers.dart';
 import '../scan/scan_actions.dart';
 import 'result_providers.dart';
 
@@ -86,7 +90,10 @@ class ScanResultScreen extends ConsumerWidget {
           ShareParams(text: _asShareText(result)),
         );
       case 'delete':
-        await ref.read(scanDaoProvider).deleteById(result.scan.id);
+        // Routed through HistoryActions, not the DAO directly, so photo
+        // cleanup (§4) happens the same way regardless of where a scan is
+        // deleted from.
+        await ref.read(historyActionsProvider).delete(result.scan.id);
         if (context.mounted) context.pop();
     }
   }
@@ -121,16 +128,25 @@ class _ResultBody extends ConsumerWidget {
     final Product? product = result.product;
     final ThemeData theme = Theme.of(context);
     final ScanCapabilities capabilities = ref.watch(scanCapabilitiesProvider);
+    final List<AllergenTerm> allTerms =
+        ref.watch(allAllergenTermsProvider).value ?? const <AllergenTerm>[];
 
     // Offsets refer to the normalised text, so the context excerpts are cut
     // from the same string the matcher searched (R5.4).
     final String normalized = TextNormalizer.normalize(scan.evaluatedText);
+    final List<List<ScanMatch>> matchBuckets = bucketMatchesByGroup(
+      result.matches,
+      allTerms,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
         VerdictBanner(verdict: scan.verdict, detail: _verdictDetail(scan)),
         const SizedBox(height: 16),
+
+        if (scan.name != null || scan.shop != null || scan.photoPath != null)
+          _ScanDetailsSummary(scan: scan),
 
         if (scan.verdict == ScanVerdict.unknown)
           _UnknownActions(capabilities: capabilities, scan: scan),
@@ -148,17 +164,17 @@ class _ResultBody extends ConsumerWidget {
           const SizedBox(height: 16),
         ],
 
-        if (result.matches.isNotEmpty) ...<Widget>[
+        if (matchBuckets.isNotEmpty) ...<Widget>[
           Text('Matches', style: theme.textTheme.titleMedium),
           const Divider(),
-          ...result.matches.map(
-            (ScanMatch match) => Padding(
+          ...matchBuckets.map(
+            (List<ScanMatch> bucket) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    match.termSnapshot,
+                    bucket.first.termSnapshot,
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.error,
                     ),
@@ -166,9 +182,20 @@ class _ResultBody extends ConsumerWidget {
                   // The surrounding text is shown so a false positive such as
                   // "nut" inside "coconut" is recognisable (R5.6).
                   Text(
-                    '"${AllergenMatcher.contextFor(normalized, match.startOffset, match.endOffset)}"',
+                    '"${AllergenMatcher.contextFor(normalized, bucket.first.startOffset, bucket.first.endOffset)}"',
                     style: theme.textTheme.bodySmall,
                   ),
+                  // Other names from the same group found in this text (§11
+                  // item 1) — grouping is a display convenience only, the
+                  // matcher itself still matches each name independently.
+                  if (bucket.length > 1)
+                    Text(
+                      'Also matched: '
+                      '${bucket.skip(1).map((ScanMatch m) => m.termSnapshot).join(', ')}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -233,6 +260,10 @@ class _ResultBody extends ConsumerWidget {
                 child: const Text('Correct product data'),
               ),
             OutlinedButton(
+              onPressed: () => context.go('/scan/result/${scan.id}/details'),
+              child: const Text('Edit details'),
+            ),
+            OutlinedButton(
               onPressed: () => context.go('/scan'),
               child: const Text('New scan'),
             ),
@@ -292,6 +323,60 @@ class _ResultBody extends ConsumerWidget {
       return 'Open Food Facts, fetched ${Formatters.date(fetched)}';
     }
     return Formatters.inputModeLabel(scan.inputMode);
+  }
+}
+
+/// The user-entered name/shop/photo, when any are set (§4 "Edit details").
+class _ScanDetailsSummary extends ConsumerWidget {
+  const _ScanDetailsSummary({required this.scan});
+
+  final Scan scan;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ThemeData theme = Theme.of(context);
+    final String? photoPath = scan.photoPath;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          if (photoPath != null) ...<Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: FutureBuilder<File>(
+                future: ref.read(scanPhotoServiceProvider).resolve(photoPath),
+                builder: (BuildContext context, AsyncSnapshot<File> snapshot) {
+                  final File? file = snapshot.data;
+                  if (file == null) {
+                    return const SizedBox(width: 64, height: 64);
+                  }
+                  return Image.file(
+                    file,
+                    width: 64,
+                    height: 64,
+                    fit: BoxFit.cover,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (scan.name != null)
+                  Text(scan.name!, style: theme.textTheme.titleSmall),
+                if (scan.shop != null)
+                  Text(scan.shop!, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -355,4 +440,47 @@ class _TagSection extends StatelessWidget {
     final int separator = tag.indexOf(':');
     return separator < 0 ? tag : tag.substring(separator + 1);
   }
+}
+
+/// Buckets [matches] whose term belongs to the same allergen group together,
+/// so two synonyms found in the same text (e.g. "Hazelnut" and "Haselnuss")
+/// show as one entry with an "also matched" line, instead of two unrelated
+/// -looking rows. A match whose term was deleted (`allergenTermId == null`)
+/// or is ungrouped renders standalone, exactly as before grouping existed.
+/// Display-only: the matcher and the persisted `ScanMatch` rows are
+/// unchanged (§11 item 1).
+@visibleForTesting
+List<List<ScanMatch>> bucketMatchesByGroup(
+  List<ScanMatch> matches,
+  List<AllergenTerm> terms,
+) {
+  final Map<String, String?> groupIdByTermId = <String, String?>{
+    for (final AllergenTerm term in terms) term.id: term.groupId,
+  };
+
+  final List<List<ScanMatch>> buckets = <List<ScanMatch>>[];
+  final Map<String, List<ScanMatch>> byGroupId = <String, List<ScanMatch>>{};
+
+  for (final ScanMatch match in matches) {
+    final String? termId = match.allergenTermId;
+    final String? groupId = termId == null ? null : groupIdByTermId[termId];
+    if (groupId == null) {
+      buckets.add(<ScanMatch>[match]);
+      continue;
+    }
+    final List<ScanMatch>? existing = byGroupId[groupId];
+    if (existing == null) {
+      final List<ScanMatch> bucket = <ScanMatch>[match];
+      byGroupId[groupId] = bucket;
+      buckets.add(bucket);
+    } else {
+      existing.add(match);
+    }
+  }
+
+  buckets.sort(
+    (List<ScanMatch> a, List<ScanMatch> b) =>
+        a.first.startOffset.compareTo(b.first.startOffset),
+  );
+  return buckets;
 }

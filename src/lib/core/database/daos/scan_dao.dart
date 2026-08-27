@@ -69,13 +69,32 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
 
   Future<ScanResult?> findResult(String scanId) => watchResult(scanId).first;
 
+  /// Column-scoped write for the fields set after a scan already exists
+  /// (name, shop, photo) — mirrors SettingsDao's column-scoped write. Never
+  /// touches evaluatedText, verdict or matches, so R4.7's snapshot guarantee
+  /// is untouched.
+  Future<void> updateDetails({
+    required String scanId,
+    Value<String?> name = const Value.absent(),
+    Value<String?> shop = const Value.absent(),
+    Value<String?> photoPath = const Value.absent(),
+  }) {
+    return (update(scans)..where((t) => t.id.equals(scanId))).write(
+      ScansCompanion(name: name, shop: shop, photoPath: photoPath),
+    );
+  }
+
   /// Writes the scan and its matches together, then prunes — one transaction,
   /// so a crash cannot leave a scan without its matches (R7.7, R4.8).
-  Future<String> insertWithMatches({
+  ///
+  /// Returns the pruned rows' non-null photo paths, so the caller — which
+  /// owns file I/O, this DAO does not — can delete the orphaned files.
+  Future<({String scanId, List<String> prunedPhotoPaths})> insertWithMatches({
     required Scan scan,
     required List<ScanMatch> matches,
     int historyLimit = 500,
   }) async {
+    late final List<String> prunedPhotoPaths;
     await transaction(() async {
       await into(scans).insertOnConflictUpdate(
         ScansCompanion(
@@ -87,6 +106,9 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
           evaluatedText: Value(scan.evaluatedText),
           verdict: Value(scan.verdict),
           matchCount: Value(scan.matchCount),
+          name: Value(scan.name),
+          shop: Value(scan.shop),
+          photoPath: Value(scan.photoPath),
         ),
       );
 
@@ -107,16 +129,28 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
         );
       }
 
-      await _pruneToLimit(historyLimit);
+      prunedPhotoPaths = await _pruneToLimit(historyLimit);
     });
-    return scan.id;
+    return (scanId: scan.id, prunedPhotoPaths: prunedPhotoPaths);
   }
 
-  Future<void> deleteById(String id) {
-    return (delete(scans)..where((t) => t.id.equals(id))).go();
+  /// Returns the deleted row (so its `photoPath` can be cleaned up), or
+  /// `null` if no scan with that id existed.
+  Future<Scan?> deleteById(String id) async {
+    final List<ScanRow> rows = await (select(
+      scans,
+    )..where((t) => t.id.equals(id))).get();
+    if (rows.isEmpty) return null;
+    await (delete(scans)..where((t) => t.id.equals(id))).go();
+    return _toScan(rows.first);
   }
 
-  Future<void> deleteAll() => delete(scans).go();
+  /// Returns every deleted row.
+  Future<List<Scan>> deleteAll() async {
+    final List<ScanRow> rows = await select(scans).get();
+    await delete(scans).go();
+    return rows.map(_toScan).toList(growable: false);
+  }
 
   Future<List<Scan>> getAll() async {
     final rows = await select(scans).get();
@@ -128,8 +162,9 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
     return rows.map(_toMatch).toList(growable: false);
   }
 
-  /// Keeps the newest [limit] scans; cascade removes their matches.
-  Future<int> _pruneToLimit(int limit) async {
+  /// Keeps the newest [limit] scans; cascade removes their matches. Returns
+  /// the pruned rows' non-null photo paths.
+  Future<List<String>> _pruneToLimit(int limit) async {
     final List<String> keep =
         await (select(scans)
               ..orderBy([
@@ -141,8 +176,16 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
               ..limit(limit))
             .map((row) => row.id)
             .get();
-    if (keep.isEmpty) return 0;
-    return (delete(scans)..where((t) => t.id.isNotIn(keep))).go();
+    if (keep.isEmpty) return const [];
+
+    final List<ScanRow> pruned = await (select(
+      scans,
+    )..where((t) => t.id.isNotIn(keep))).get();
+    await (delete(scans)..where((t) => t.id.isNotIn(keep))).go();
+    return pruned
+        .map((ScanRow row) => row.photoPath)
+        .whereType<String>()
+        .toList(growable: false);
   }
 
   static Scan _toScan(ScanRow row) {
@@ -155,6 +198,9 @@ class ScanDao extends DatabaseAccessor<AppDatabase> with _$ScanDaoMixin {
       evaluatedText: row.evaluatedText,
       verdict: row.verdict,
       matchCount: row.matchCount,
+      name: row.name,
+      shop: row.shop,
+      photoPath: row.photoPath,
     );
   }
 

@@ -6,13 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Terms are built through the same normaliser the DAO uses, so a test can
 /// never accidentally assert against a hand-written normalised form.
-AllergenTerm term(String value) {
+AllergenTerm term(String value, {String? groupId}) {
   final DateTime timestamp = DateTime.utc(2026, 1, 1);
   return AllergenTerm(
     id: 'id-$value',
     term: value,
     normalizedTerm: TextNormalizer.normalize(value),
     isActive: true,
+    groupId: groupId,
     createdAt: timestamp,
     updatedAt: timestamp,
   );
@@ -197,6 +198,22 @@ void main() {
         ScanVerdict.noMatch,
       );
     });
+
+    test(
+      'two synonyms in the same group both present still produce two '
+      'separate matches — grouping is a display convenience, not a '
+      'matching-rule change (§11 item 1)',
+      () {
+        final MatchOutcome outcome = AllergenMatcher.match(
+          text: 'sugar, hazelnuts, HASELNUSS paste',
+          activeTerms: <AllergenTerm>[
+            term('hazelnut', groupId: 'group-1'),
+            term('haselnuss', groupId: 'group-1'),
+          ],
+        );
+        expect(outcome.matches, hasLength(2));
+      },
+    );
 
     test('a term below the minimum length is ignored entirely', () {
       final AllergenTerm tooShort = term('so');

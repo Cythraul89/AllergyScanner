@@ -18,5 +18,6 @@ final Provider<ScanActions> scanActionsProvider = Provider<ScanActions>((ref) {
     settingsDao: ref.watch(settingsDaoProvider),
     openFoodFacts: ref.watch(openFoodFactsServiceProvider),
     log: ref.watch(logServiceProvider),
+    scanPhotos: ref.watch(scanPhotoServiceProvider),
   );
 });

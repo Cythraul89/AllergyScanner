@@ -52,7 +52,7 @@ class AboutScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             'Requests identify this app as '
-            'AllergyScanner/${version.version} ($kOpenFoodFactsContact).',
+            'AllergyScanner/${version.version} ($kAppContactEmail).',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 24),

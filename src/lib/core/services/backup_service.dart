@@ -11,6 +11,7 @@ import '../database/app_database.dart';
 import '../models/enums.dart';
 import '../utils/formatters.dart';
 import 'log_service.dart';
+import 'scan_photo_service.dart';
 
 /// What an import did. [skipped] counts rows that could not be attached — the
 /// caller must surface it when it is greater than zero (R8.2).
@@ -41,19 +42,24 @@ class BackupService {
   BackupService({
     required AppDatabase database,
     required LogService log,
+    required ScanPhotoService scanPhotos,
     DateTime Function()? now,
   }) : _database = database,
        _log = log,
+       _scanPhotos = scanPhotos,
        _now = now ?? DateTime.now;
 
-  /// Version of the archive layout itself, independent of the schema version.
-  static const int backupFormatVersion = 1;
+  /// Version of the archive layout itself, independent of the schema
+  /// version. v2 adds `name`/`shop`/`photoPath` to each scan row plus one
+  /// archive entry per attached photo.
+  static const int backupFormatVersion = 2;
 
   static const String _dataEntry = 'data.json';
   static const String _manifestEntry = 'manifest.json';
 
   final AppDatabase _database;
   final LogService _log;
+  final ScanPhotoService _scanPhotos;
   final DateTime Function() _now;
 
   /// Builds the archive in memory.
@@ -76,6 +82,20 @@ class BackupService {
           }),
         ),
       );
+
+    // One archive entry per attached photo, named by its own photoPath so
+    // import can restore it to the exact same relative location — raw
+    // bytes, not base64-in-JSON, to avoid ~33% bloat plus JSON-escaping
+    // overhead on binary data.
+    final List<Map<String, Object?>> scanRows =
+        (payload['scans'] as List).cast<Map<String, Object?>>();
+    for (final Map<String, Object?> row in scanRows) {
+      final String? photoPath = row['photoPath'] as String?;
+      if (photoPath == null) continue;
+      final File file = await _scanPhotos.resolve(photoPath);
+      if (!await file.exists()) continue;
+      archive.add(ArchiveFile.bytes(photoPath, await file.readAsBytes()));
+    }
 
     return ZipEncoder().encode(archive);
   }
@@ -141,7 +161,43 @@ class BackupService {
       );
     }
 
-    return _applyPayload(payload);
+    // Absent in a v1 archive (before this field existed), which is fine — a
+    // pre-v2 backup never claims a version newer than this app supports.
+    final ArchiveFile? manifestFile = archive.find(_manifestEntry);
+    final int archiveBackupFormatVersion = manifestFile == null
+        ? 1
+        : _asInt(_tryDecodeManifest(manifestFile)?['backupFormatVersion']) ??
+              1;
+    if (archiveBackupFormatVersion > backupFormatVersion) {
+      throw BackupFormatException(
+        'This backup was written by a newer version of the app '
+        '(archive format $archiveBackupFormatVersion, this app supports '
+        '$backupFormatVersion).',
+      );
+    }
+
+    final ImportOutcome outcome = await _applyPayload(payload);
+
+    // A v1 archive has no photos/ entries, so this is a no-op for it.
+    for (final ArchiveFile entry in archive.files) {
+      if (!entry.name.startsWith('${ScanPhotoService.subdirectoryName}/')) {
+        continue;
+      }
+      final List<int>? bytes = entry.readBytes();
+      if (bytes == null) continue;
+      await _scanPhotos.restoreFromBytes(photoPath: entry.name, bytes: bytes);
+    }
+
+    return outcome;
+  }
+
+  static Map<String, Object?>? _tryDecodeManifest(ArchiveFile manifestFile) {
+    try {
+      return jsonDecode(utf8.decode(manifestFile.readBytes() ?? const <int>[]))
+          as Map<String, Object?>;
+    } on Object {
+      return null;
+    }
   }
 
   Future<Map<String, Object?>> _readAll() {
@@ -198,6 +254,9 @@ class BackupService {
                 'evaluatedText': row.evaluatedText,
                 'verdict': row.verdict.name,
                 'matchCount': row.matchCount,
+                'name': row.name,
+                'shop': row.shop,
+                'photoPath': row.photoPath,
               },
             )
             .toList(growable: false),
@@ -346,6 +405,11 @@ class BackupService {
                   ),
                 ),
                 matchCount: Value(_asInt(row['matchCount']) ?? 0),
+                // Absent in a v1 archive; a plain map lookup already reads
+                // that as null, so no version branch is needed here.
+                name: Value(row['name'] as String?),
+                shop: Value(row['shop'] as String?),
+                photoPath: Value(row['photoPath'] as String?),
               ),
             );
         imported++;

@@ -1,10 +1,13 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/daos/product_dao.dart';
+import '../../core/database/daos/scan_dao.dart';
 import '../../core/models/enums.dart';
 import '../../core/models/product.dart';
 import '../../core/models/scan.dart';
 import '../../core/providers.dart';
+import '../../core/services/scan_photo_service.dart';
 import '../scan/scan_actions.dart';
 import '../scan/scan_providers.dart';
 
@@ -74,5 +77,58 @@ class ProductActions {
       ),
     );
     await _scanActions.reevaluate(scanId);
+  }
+}
+
+final Provider<ScanDetailsActions> scanDetailsActionsProvider =
+    Provider<ScanDetailsActions>(
+      (ref) => ScanDetailsActions(
+        scanDao: ref.watch(scanDaoProvider),
+        scanPhotos: ref.watch(scanPhotoServiceProvider),
+      ),
+    );
+
+/// Write side for the fields a scan gets after the fact: name, shop, photo.
+/// Never re-evaluates — these never touch evaluatedText or verdict.
+class ScanDetailsActions {
+  ScanDetailsActions({
+    required ScanDao scanDao,
+    required ScanPhotoService scanPhotos,
+  }) : _scanDao = scanDao,
+       _scanPhotos = scanPhotos;
+
+  final ScanDao _scanDao;
+  final ScanPhotoService _scanPhotos;
+
+  /// [newPhotoSourcePath] is a freshly picked file's path, or `null` to
+  /// leave the photo unchanged. [removePhoto] removes it instead.
+  Future<void> save({
+    required String scanId,
+    String? existingPhotoPath,
+    String? name,
+    String? shop,
+    String? newPhotoSourcePath,
+    bool removePhoto = false,
+  }) async {
+    String? photoPath = existingPhotoPath;
+    if (removePhoto && existingPhotoPath != null) {
+      await _scanPhotos.delete(existingPhotoPath);
+      photoPath = null;
+    } else if (newPhotoSourcePath != null) {
+      if (existingPhotoPath != null) {
+        await _scanPhotos.delete(existingPhotoPath);
+      }
+      photoPath = await _scanPhotos.attach(
+        scanId: scanId,
+        sourcePath: newPhotoSourcePath,
+      );
+    }
+
+    await _scanDao.updateDetails(
+      scanId: scanId,
+      name: Value(name),
+      shop: Value(shop),
+      photoPath: Value(photoPath),
+    );
   }
 }

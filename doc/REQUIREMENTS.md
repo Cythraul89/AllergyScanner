@@ -36,8 +36,10 @@ pubspec name: `allergy_scanner` · package/artifact name: `allergy-scanner`.
   time-triggered).
 - No writing back to Open Food Facts (read-only client).
 - No nutrition, additive, diet (vegan/halal) or calorie evaluation.
-- No allergen synonym/alias dictionary and no seeded allergen catalogue —
-  see §5.4 and §11.
+- No seeded allergen catalogue (e.g. the 14 EU-declared allergens) — see
+  §11 item 1. Grouping several names under one allergen, with translation
+  *suggestions*, is delivered (§4.1, §5.4); the app still ships with no
+  pre-populated terms or groups.
 
 ---
 
@@ -129,6 +131,7 @@ not a dependency.
 | `normalizedTerm` | text, not null | Result of §5.2 normalisation; the matcher reads only this |
 | `isActive` | bool, not null, default `true` | Inactive terms are kept but not matched |
 | `note` | text, nullable | Free remark, e.g. "severe" |
+| `groupId` | text, nullable | FK → `allergen_groups.id`, `onDelete: setNull`; `null` = ungrouped |
 | `createdAt` | datetime, not null | |
 | `updatedAt` | datetime, not null | |
 
@@ -138,6 +141,26 @@ not a dependency.
   rejected (§5.5).
 - **R4.3** `normalizedTerm` is recomputed on every write of `term`. It is
   never edited directly by the user.
+- **R4.3a** Matching stays per-term, unchanged by grouping — a group is an
+  organisational label, not a matching-rule change (§5.4).
+
+### 4.1a `allergen_groups` — names for the same allergen, in several languages
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | text, PK | UUID v4 |
+| `label` | text, not null | Display name, e.g. "Hazelnut"; not matched, not required to be unique |
+| `createdAt` | datetime, not null | |
+| `updatedAt` | datetime, not null | |
+
+- **R4.1b** Deleting a group ungroups its member terms (FK `setNull`); it
+  never deletes them.
+- **R4.1c** Adding a member name may be assisted by a DE/EN/FR/IT translation
+  *suggestion* from an online, keyless service (MyMemory), gated on
+  `remoteLookupEnabled` (§6.6) exactly like the Open Food Facts lookup — no
+  suggestion is ever inserted automatically, the user always reviews it
+  first through the same duplicate/length checks as any other term (R4.1,
+  R4.2).
 
 ### 4.2 `products` — Open Food Facts cache and local overrides
 
@@ -178,11 +201,21 @@ not a dependency.
 | `evaluatedText` | text, not null | Exactly the text that was matched |
 | `verdict` | int (enum), not null | `hit` \| `noMatch` \| `unknown` (§5.6) |
 | `matchCount` | int, not null | Denormalised count of `scan_matches` |
+| `name` | text, nullable | User-entered label, set after the fact via *Edit details* |
+| `shop` | text, nullable | Free text; groups history entries that share the same value (§7.4) |
+| `photoPath` | text, nullable | Relative path under the app documents dir to a user-attached photo; set only via *Edit details*, never at scan time |
 
 - **R4.7** History is self-contained: deleting a product or an allergy term
   never makes a past scan unreadable (§4.4).
 - **R4.8** History is capped at `kMaxScanHistory = 500` entries; the oldest
   are pruned on insert. The cap is shown in Settings.
+- **R4.11** A scan's `name`, `shop` and `photoPath` are set after the fact via
+  *Edit details*, never at scan time; editing them never re-evaluates the
+  verdict and never touches `evaluatedText`, so R4.7's snapshot guarantee is
+  unaffected.
+- **R4.12** Deleting a scan (single, clear-all, or pruning past
+  `kMaxScanHistory`) deletes its attached photo file, if any — no orphaned
+  file survives its scan row.
 
 ### 4.4 `scan_matches` — one row per hit inside a scan
 
@@ -260,7 +293,11 @@ consequences are stated here so they are not rediscovered as bugs:
   the text; `tracesTags` from Open Food Facts is displayed but not matched.
 
 The UI must therefore never claim a product is safe (§5.6, §7.2), and the
-alias feature is listed in §11.
+alias feature is listed in §11. Grouping several names under one allergen
+(§4.1a) is an organisational/UI convenience over this per-term substring
+rule, not a change to it — each name in a group still needs to appear
+literally in the text; the app never infers that a match on one name implies
+a match on its synonyms.
 
 ### 5.5 Guard rails
 
@@ -278,6 +315,21 @@ alias feature is listed in §11.
 
 - **R5.7** An empty allergy list produces `unknown`, not `noMatch`, and the
   result view links to the Allergies tab.
+
+### 5.7 Ingredients-marker gate (before matching)
+
+- **R5.8** Before OCR or manually entered text is evaluated, it is scanned
+  (unnormalised, case-insensitive) for one of four literal section markers —
+  `Ingredients:`, `Zutaten:`, `Ingrédients:` (accent optional), `Ingredienti:`
+  — the word, an optional space, and a colon. Plain literal/regex search, not
+  language-model interpretation (§1.2).
+- **R5.9** If no marker is found, the text is not evaluated: the review
+  screen's *Check* action stays disabled until the user edits the text to add
+  a recognised marker, or re-scans. This is enforced entirely in the review
+  screen, before `ScanActions.evaluate` is called (doc/ARCHITECTURE.md §5.9)
+  — a blocked attempt is never written to history (R7.7 does not apply to
+  it). This gate applies identically to OCR and to manually entered/pasted
+  text (§6 below).
 
 ---
 
@@ -334,6 +386,15 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   continuous re-scan loop.
 - **R7.3** OCR output is presented in an **editable** text field before
   evaluation — recognition errors must be fixable without a re-scan.
+- **R7.12** When a marker is found (R5.8), the review screen shows a live
+  preview of the detected section with matches against the active allergy
+  list highlighted inline, using the same normalised-text offsets as the
+  result view (R5.4); colour is never the only signal (R7.4). The preview
+  carries an explicit caveat that the full text is checked again on *Check*
+  — the preview's section boundary never narrows what is actually
+  evaluated. When no marker is found (R5.9), the screen names the four
+  recognised markers and disables *Check*; the fix happens in the same
+  field (R7.3), never a separate dialog.
 
 ### 7.2 Result view
 
@@ -345,22 +406,39 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   (`Open Food Facts, fetched <date>` / `manual` / `OCR` / `typed`), the
   `allergens_tags` / `traces_tags` as separate informational chips, and the
   §1.3 disclaimer line.
-- **R7.6** Actions: *Correct product data* (barcode scans), *Re-scan*,
+- **R7.6** Actions: *Correct product data* (barcode scans), *Edit details*
+  (name/shop/photo, every scan), *Re-scan*,
   *Add a matched-looking word to my list*, *Delete this scan*.
 - **R7.7** Every scan is written to history before the result view is shown,
   so a crash cannot lose it.
+- **R7.13** When set, a scan's name/shop are shown near the top of the
+  result view, and its attached photo (if any) as a thumbnail — distinct
+  from the OCR capture photo, which is never persisted (N10/N10a).
 
 ### 7.3 Allergies
 
 - **R7.8** List of terms, active ones first, with an add/edit sheet, an
-  active toggle, swipe-to-delete with undo, and a search field.
-- **R7.9** Deleting a term does not alter past scans (§4.4).
+  active toggle, swipe-to-delete with undo, and a search field. Terms may be
+  organised into groups (§4.1a); the screen shows one collapsible section
+  per group, then an "Other terms" section for ungrouped terms, unchanged in
+  rendering from today's flat list.
+- **R7.9** Deleting a term does not alter past scans (§4.4). Deleting a
+  group (R4.1b) does not delete its member terms.
 
 ### 7.4 History
 
-- **R7.10** Reverse-chronological list showing date, product or "text scan",
-  verdict badge and match count; filterable by verdict; opens the stored
-  result view without any network access.
+- **R7.10** History is grouped by shop (R7.14) and, within each shop group,
+  reverse-chronological, showing date, name/product/"text scan", verdict
+  badge and match count; filterable by verdict; opens the stored result view
+  without any network access.
+- **R7.14** Scans sharing the same (trimmed) `shop` value are grouped
+  together automatically, each group headed by its shop name and ordered by
+  its own most-recent scan; scans with no `shop` set are grouped under
+  "Ungrouped". Because every existing scan has no `shop` value until the
+  user starts using it, this is visually a single added header line for
+  anyone not yet using the field, not a reordering of their history. Purely
+  a display transform of the already-fetched, already reverse-chronological
+  list — no new table, no new query.
 
 ### 7.5 Settings
 
@@ -373,11 +451,18 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 ## 8. Backup, export and sync
 
 - **R8.1** Local ZIP export contains all four data tables plus settings
-  (without secrets) as JSON, and a manifest with app version and schema
-  version. Filename: `allergy_scanner_YYYYMMDD_HHmmss.zip`.
+  (without secrets) as JSON, and a manifest with app version, schema version
+  and archive format version (`backupFormatVersion`, currently 2 —
+  independent of the schema version). Any history photo a scan has attached
+  travels as its own archive entry (raw bytes, named after its own
+  `photoPath`), not embedded in the JSON. Filename:
+  `allergy_scanner_YYYYMMDD_HHmmss.zip`.
 - **R8.2** Import is transactional, refuses an archive with a newer schema
-  version than the app, and reports a skip count for rows it could not
-  attach; the caller surfaces that count when > 0.
+  version or a newer archive format version than the app, and reports a
+  skip count for rows it could not attach; the caller surfaces that count
+  when > 0. An archive with no `name`/`shop`/`photoPath` fields and no photo
+  entries (written before backup format version 2) still imports correctly
+  — those fields are simply absent, read as `null`.
 - **R8.3** Nextcloud/WebDAV sync uploads and downloads exactly that archive
   over basic auth. Optional SHA-256 certificate pinning for self-signed
   servers; a fingerprint mismatch rejects the connection.
@@ -395,7 +480,7 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 | # | Requirement |
 |---|---|
 | N1 | Offline first: launch, allergy list, matching, history, manual entry and OCR work with no network. Only barcode lookup of an uncached product needs it. |
-| N2 | No accounts, no telemetry, no third-party analytics. The only outbound hosts are Open Food Facts and the user's own WebDAV server. |
+| N2 | No accounts, no telemetry, no third-party analytics. Outbound hosts are Open Food Facts, the user's own WebDAV server, and MyMemory (translation *suggestions* for allergen group names, §4.1c) — all three gated on `remoteLookupEnabled` (R6.6); with it off, none is called. |
 | N3 | A scan of already-cached data produces a verdict without a network round trip; matching a 5 000-character ingredient text against 100 terms stays imperceptible (target < 50 ms). |
 | N4 | `flutter analyze --fatal-infos` clean; no `// ignore` used to reach it. |
 | N5 | Unit tests cover the normaliser, the matcher (§5 rule by rule), the Open Food Facts response mapping against a loopback `HttpServer`, and every DAO against an in-memory database. |
@@ -403,7 +488,8 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 | N7 | Two platforms (Android, iOS) × debug + release in one reusable `build.yml`; the dropped platforms of §3 are stated in the README. |
 | N8 | Licence GPL-3.0. |
 | N9 | Accessibility: verdict never conveyed by colour alone; all controls labelled for screen readers; text scales without clipping. |
-| N10 | Privacy: photos are processed on-device and never stored or uploaded; only the barcode digits leave the device, and only when remote lookup is enabled. `PRIVACY.md` plus an in-app privacy screen state this. |
+| N10 | Privacy — camera capture for scanning: a photo taken for barcode or ingredient-text (OCR) recognition is processed entirely on-device and deleted immediately after use; it is never stored or uploaded. |
+| N10a | Privacy — attached photos: separately and only when the user chooses to, a photo may be attached to a history entry after the fact (*Edit details*, e.g. a photo of the receipt or shelf). Unlike N10's capture photo, this one **is** stored on-device — never uploaded on its own — until the user removes it or deletes the scan it belongs to; it leaves the device only inside a backup archive the user explicitly exports or syncs (§8). Only the barcode digits ever leave the device on their own, and only when remote lookup is enabled. `PRIVACY.md` plus an in-app privacy screen state both N10 and N10a. |
 
 ---
 
@@ -429,6 +515,14 @@ section doubles as a change history.
 1. **Alias/synonym lists per term** — the direct fix for §5.4: Latin names,
    E-numbers, translations, with a seeded catalogue of the 14 allergens the
    EU requires to be declared, which the user can enable and extend.
+   ✓ *(partially delivered)* — grouping several names under one allergen
+   (§4.1a) and translation-assisted synonym entry (§4.1c, an online MyMemory
+   suggestion the user reviews before it becomes a term) are delivered.
+   **Not** delivered: the seeded 14-EU-allergen catalogue — translating
+   legally-significant allergen names via a best-effort MT API is not
+   something to seed automatically; a hand-curated, offline, deterministic
+   seed table (N1 requires first-run to work without a network) is a
+   separate follow-up with its own review surface.
 2. **Word-boundary and stemming options** to reduce `nut`/`coconut`-style
    false positives.
 3. **Desktop OCR** — a second `TextRecognitionService` implementation taking an

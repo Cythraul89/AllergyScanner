@@ -13,7 +13,9 @@ import 'core/providers.dart';
 import 'core/services/backup_service.dart';
 import 'core/services/log_service.dart';
 import 'core/services/open_food_facts_service.dart';
+import 'core/services/scan_photo_service.dart';
 import 'core/services/text_recognition_service.dart';
+import 'core/services/translation_service.dart';
 import 'core/services/webdav_service.dart';
 import 'core/utils/app_version.dart';
 import 'core/utils/scan_capabilities.dart';
@@ -58,6 +60,7 @@ Future<void> _startUp() async {
   });
 
   final AppDatabase database = AppDatabase();
+  final ScanPhotoService scanPhotos = await ScanPhotoService.open(log: log);
   final AppVersion version = await _loadVersion(log);
 
   // The ingredient language starts at the device locale; existing rows are not
@@ -73,7 +76,7 @@ Future<void> _startUp() async {
       headers: <String, Object>{
         // Mandatory for Open Food Facts — they block generic user agents.
         'User-Agent':
-            'AllergyScanner/${version.version} ($kOpenFoodFactsContact)',
+            'AllergyScanner/${version.version} ($kAppContactEmail)',
       },
     ),
   );
@@ -97,9 +100,13 @@ Future<void> _startUp() async {
               : const UnsupportedTextRecognitionService(),
         ),
         backupServiceProvider.overrideWithValue(
-          BackupService(database: database, log: log),
+          BackupService(database: database, log: log, scanPhotos: scanPhotos),
         ),
         webdavServiceProvider.overrideWithValue(WebdavService(log: log)),
+        translationServiceProvider.overrideWithValue(
+          TranslationService(dio: dio, log: log),
+        ),
+        scanPhotoServiceProvider.overrideWithValue(scanPhotos),
         secureStorageProvider.overrideWithValue(const FlutterSecureStorage()),
       ],
       child: const AllergyScannerApp(),

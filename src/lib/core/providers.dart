@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'database/app_database.dart';
+import 'database/daos/allergen_group_dao.dart';
 import 'database/daos/allergen_term_dao.dart';
 import 'database/daos/product_dao.dart';
 import 'database/daos/scan_dao.dart';
@@ -13,7 +14,9 @@ import 'models/app_settings.dart';
 import 'services/backup_service.dart';
 import 'services/log_service.dart';
 import 'services/open_food_facts_service.dart';
+import 'services/scan_photo_service.dart';
 import 'services/text_recognition_service.dart';
+import 'services/translation_service.dart';
 import 'services/webdav_service.dart';
 import 'utils/app_version.dart';
 import 'utils/scan_capabilities.dart';
@@ -55,6 +58,16 @@ final Provider<WebdavService> webdavServiceProvider = Provider<WebdavService>(
   (ref) => _mustOverride('webdavServiceProvider'),
 );
 
+final Provider<TranslationService> translationServiceProvider =
+    Provider<TranslationService>(
+      (ref) => _mustOverride('translationServiceProvider'),
+    );
+
+final Provider<ScanPhotoService> scanPhotoServiceProvider =
+    Provider<ScanPhotoService>(
+      (ref) => _mustOverride('scanPhotoServiceProvider'),
+    );
+
 final Provider<FlutterSecureStorage> secureStorageProvider =
     Provider<FlutterSecureStorage>(
       (ref) => _mustOverride('secureStorageProvider'),
@@ -75,6 +88,11 @@ final Provider<ScanCapabilities> scanCapabilitiesProvider =
 final Provider<AllergenTermDao> allergenTermDaoProvider =
     Provider<AllergenTermDao>(
       (ref) => ref.watch(appDatabaseProvider).allergenTermDao,
+    );
+
+final Provider<AllergenGroupDao> allergenGroupDaoProvider =
+    Provider<AllergenGroupDao>(
+      (ref) => ref.watch(appDatabaseProvider).allergenGroupDao,
     );
 
 final Provider<ProductDao> productDaoProvider = Provider<ProductDao>(

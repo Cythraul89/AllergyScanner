@@ -16,6 +16,9 @@ class Scan extends Equatable {
     required this.matchCount,
     this.barcode,
     this.productNameSnapshot,
+    this.name,
+    this.shop,
+    this.photoPath,
   });
 
   final String id;
@@ -26,6 +29,18 @@ class Scan extends Equatable {
   final String evaluatedText;
   final ScanVerdict verdict;
   final int matchCount;
+
+  /// User-entered custom label, set after the fact via "Edit details" —
+  /// distinct from [productNameSnapshot], frozen at scan time from product
+  /// data.
+  final String? name;
+
+  /// Free text; history groups scans that share the same value (§7.4).
+  final String? shop;
+
+  /// Relative path under the app documents dir to a user-attached photo.
+  /// Unrelated to the OCR capture photo, which is never persisted (N10/N10a).
+  final String? photoPath;
 
   bool get isBarcodeScan =>
       inputMode == ScanInputMode.barcode ||
@@ -41,6 +56,9 @@ class Scan extends Equatable {
     evaluatedText,
     verdict,
     matchCount,
+    name,
+    shop,
+    photoPath,
   ];
 }
 

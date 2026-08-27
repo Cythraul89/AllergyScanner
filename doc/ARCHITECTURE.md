@@ -63,15 +63,17 @@ src/lib/
 ├── main.dart                       bootstrap: logger, DB, Dio, services, overrides
 ├── app.dart                        MaterialApp.router, themes, routerProvider
 ├── core/
-│   ├── constants.dart              Open Food Facts contact/limits, TTL, history cap
+│   ├── constants.dart              contact/limits, TTL, history cap, MyMemory base URL
 │   ├── providers.dart              overridden singletons, DAO + read providers
 │   ├── database/
 │   │   ├── app_database.dart       @DriftDatabase, schemaVersion, migrations
-│   │   ├── tables/                 allergen_terms, products, scans,
-│   │   │                           scan_matches, settings
-│   │   └── daos/                   allergen_term, product, scan, settings
+│   │   ├── tables/                 allergen_terms, allergen_groups, products,
+│   │   │                           scans, scan_matches, settings
+│   │   └── daos/                   allergen_term, allergen_group, product,
+│   │                               scan, settings
 │   ├── models/
 │   │   ├── allergen_term.dart
+│   │   ├── allergen_group.dart     AllergenGroup + AllergenGroupWithTerms
 │   │   ├── product.dart
 │   │   ├── scan.dart               Scan + ScanMatch + ScanResult
 │   │   ├── scan_input.dart         sealed: BarcodeInput | TextInput
@@ -79,12 +81,15 @@ src/lib/
 │   │   └── app_settings.dart
 │   ├── calculators/
 │   │   ├── text_normalizer.dart    the single normalisation function (§5.1)
-│   │   └── allergen_matcher.dart   pure matching + verdict + match context
+│   │   ├── allergen_matcher.dart   pure matching + verdict + match context
+│   │   └── ingredient_marker_detector.dart  localized "Ingredients:" gate (§5.15)
 │   ├── services/
 │   │   ├── log_service.dart        file logger, everything logs through it
 │   │   ├── open_food_facts_service.dart   Dio client + sealed OffResult
+│   │   ├── translation_service.dart       MyMemory client + sealed TranslationResult
 │   │   ├── text_recognition_service.dart  ML Kit behind an interface
 │   │   ├── backup_service.dart     ZIP export/import (bytes and file)
+│   │   ├── scan_photo_service.dart shop/name/photo history attachments (§5.16)
 │   │   └── webdav_service.dart     Nextcloud sync + certificate pinning
 │   ├── utils/
 │   │   ├── scan_capabilities.dart  the only place that asks about the platform
@@ -93,14 +98,17 @@ src/lib/
 │   └── widgets/
 │       ├── error_view.dart
 │       ├── empty_view.dart
-│       └── verdict_banner.dart     banner + badge, shared by result and history
+│       ├── verdict_banner.dart     banner + badge, shared by result and history
+│       └── highlighted_text.dart   inline TextSpan highlighting (§5.15)
 ├── features/
 │   ├── disclaimer/                 the gate shown before the shell (§5.13)
 │   ├── scan/                       hub, camera, capture, review, manual,
 │   │                               scan_actions.dart (the pipeline)
-│   ├── result/                     result view + product correction
-│   ├── allergies/                  list + add/edit screen + actions
-│   ├── history/                    list + filter + actions
+│   ├── result/                     result view, product correction, scan
+│   │                               details (name/shop/photo) edit
+│   ├── allergies/                  list + add/edit screen + actions, plus
+│   │                               group_edit_screen.dart (§4.1a)
+│   ├── history/                    list, shop grouping, filter + actions
 │   └── settings/                   settings, about, privacy, logs, backup, sync
 └── shell/
     ├── adaptive_shell.dart         kDesktopBreakpoint = 600, disclaimer gate
@@ -118,14 +126,18 @@ Tables, columns and constraints are specified in `doc/REQUIREMENTS.md` §4 and
 are not duplicated here. Structural facts:
 
 ```
-allergen_terms ──┐ (setNull)
-                 ├──< scan_matches >──── scans ──── products
-products ────────┘ (cascade from scans)   (setNull)
+allergen_groups ──┐ (setNull)
+allergen_terms ────┤ (setNull)
+                   ├──< scan_matches >──── scans ──── products
+products ──────────┘ (cascade from scans)   (setNull)
 settings (single row, id = 1)
 ```
 
-- `schemaVersion` starts at 1. Every change bumps it and adds an
-  `if (from < N)` step in `onUpgrade`.
+- `schemaVersion` was 1 through the first Android/iOS-scaffold compile
+  (2026-08-20); it is now 2 (§5.15/§5.16's `allergen_groups` table and
+  `scans.name`/`shop`/`photoPath`) — the app's first real `onUpgrade` step,
+  purely additive (`createTable`/`addColumn`, no data transform). Every
+  further change bumps it again and adds another `if (from < N)` step.
 - Foreign keys are chosen so history stays readable: `scan_matches.scanId`
   cascades, `scan_matches.allergenTermId` and `scans.barcode` are nullable and
   `setNull` (§5.5).
@@ -399,6 +411,78 @@ which is recorded in the README, in `CLAUDE.md` and in `build.yml` itself. The
 adaptive 600 dp layout stays — for tablets and landscape phones, not for a
 desktop target.
 
+### 5.15 Allergen groups are an additive, nullable overlay; the marker gate lives in the screen
+
+`allergen_groups` is a new table; `allergen_terms.groupId` is a *nullable* FK
+to it, `onDelete: setNull`. Matching (`AllergenMatcher`) is completely
+unchanged — grouping is an organisational/UI layer, never a matching-rule
+change (§5.3, REQUIREMENTS §4.1a/§5.4).
+
+*Why nullable, not a required group-per-term:* a required FK would force
+every existing term into a synthetic one-member group on upgrade for no
+query-simplicity benefit — showing a group's members still needs the same
+join either way — turning a purely additive migration into a data-rewriting
+one for zero gain.
+
+*Rejected:* teaching `AllergenMatcher` about groups directly (would couple a
+pure, no-I/O calculator to an organisational concept that has nothing to do
+with substring matching), and deduplicating matches at the persistence layer
+(the `scan_matches` rows stay one-per-term; deduping for display happens only
+in `scan_result_screen.dart`'s `bucketMatchesByGroup`, a pure function kept
+separate from the stored data).
+
+Separately, the ingredients-marker gate (`IngredientMarkerDetector`,
+REQUIREMENTS §5.7) lives entirely in `TextReviewScreen`, before
+`ScanActions.evaluate` is ever called — never as a branch inside
+`ScanActions` itself, consistent with §5.9 below. `HighlightedText`'s pure
+`resolveHighlightSegments` defensively clips and drops overlapping ranges,
+because `AllergenMatcher.match` was designed for a UI that renders each match
+on its own line (no overlap hazard); inline `TextSpan` rendering is the first
+place overlapping terms (e.g. "milk" inside "milk powder") could actually
+corrupt output.
+
+*Known limitation, recorded rather than rediscovered:* MyMemory (the online,
+keyless translation service backing "suggest translations") has no reliable
+explicit "not found" signal for an unauthenticated call — in practice it
+almost always returns *some* string. `TranslationNotFound` may rarely or
+never fire in practice; the real signal is the optional `match`/`quality`
+field, which is best-effort and never gates anything, since every suggestion
+is manually reviewed before it becomes a real term.
+
+### 5.16 History photo/name/shop: DAO stays DB-only, the service owns file I/O
+
+`ScanDao` never touches `dart:io`. `insertWithMatches`, `deleteById` and
+`deleteAll` return the affected rows' (or pruned rows') `photoPath`s instead
+of performing file deletion themselves; the caller — `ScanActions`,
+`HistoryActions` — passes those paths to `ScanPhotoService`, which owns the
+file store.
+
+*Why:* keeps the DAO layer's existing "pure DB, no I/O" shape (matching every
+other DAO in this app) instead of special-casing one table to also delete
+files, and keeps file-deletion failure handling (best-effort, log-and-swallow
+— a missing file must never block a DB delete that already committed) in one
+place rather than duplicated at every call site.
+
+`ScanPhotoService.resolve` derives a file's location from its own directory
+plus the stored path's *basename* — not from `getApplicationDocumentsDirectory()`
+called a second time, and not from an assumption about its own directory's
+name. This is what makes the service constructible with a plain temp
+directory in tests, exactly like `LogService`.
+
+The backup archive's photo entries are named after their own `photoPath` and
+carry raw bytes, not base64-in-JSON — avoiding both the ~33% size inflation
+and the JSON-escaping overhead of round-tripping binary data through the
+existing single-`Map` `data.json` payload. `backupFormatVersion` (2, distinct
+from `schemaVersion`) tracks this archive-layout change; a v1 archive (no
+photo entries, no `name`/`shop`/`photoPath` keys) still imports correctly,
+since the existing `Map` access pattern already reads an absent key as
+`null`.
+
+*Rejected:* persisting the OCR capture photo too, or blurring N10 (capture,
+never stored) and N10a (attached, opt-in, stored until removed) into one
+requirement — they are deliberately separate guarantees about two different
+actions (REQUIREMENTS §9).
+
 ---
 
 ## 6. Navigation map
@@ -409,13 +493,19 @@ StatefulShellRoute.indexedStack → AdaptiveShell
 ├── branch 0  /scan
 │              /scan/barcode                 camera, registered only if capable
 │              /scan/text                     photo → OCR, registered if capable
-│              /scan/review                   editable recognised/typed text
+│              /scan/review                   editable recognised/typed text +
+│              │                              ingredients-marker gate (§5.15)
 │              /scan/manual                   barcode or text entry
 │              /scan/result/:scanId           ScanResultScreen
 │              /scan/result/:scanId/product   product correction
+│              /scan/result/:scanId/details   name/shop/photo (§5.16); reached
+│                                             from either shell branch via an
+│                                             absolute path, same as .../product
 ├── branch 1  /allergies
 │              /allergies/add
 │              /allergies/:termId/edit
+│              /allergies/groups/add          allergen group (§5.15)
+│              /allergies/groups/:groupId/edit
 ├── branch 2  /history
 │              /history/:scanId               ScanResultScreen (same widget)
 └── branch 3  /settings
@@ -456,8 +546,10 @@ network client in a test:
 | `dioProvider` | `Dio` |
 | `appVersionProvider` | `AppVersion` |
 | `openFoodFactsServiceProvider` | `OpenFoodFactsService` |
+| `translationServiceProvider` | `TranslationService` |
 | `textRecognitionServiceProvider` | `MlKitTextRecognitionService` or `UnsupportedTextRecognitionService` |
 | `backupServiceProvider` | `BackupService` |
+| `scanPhotoServiceProvider` | `ScanPhotoService` |
 | `webdavServiceProvider` | `WebdavService` |
 | `secureStorageProvider` | `FlutterSecureStorage` |
 
@@ -479,17 +571,31 @@ Layout mirrors `lib/`:
 
 ```
 src/test/
-├── calculators/  text_normalizer_test.dart, allergen_matcher_test.dart
+├── calculators/  text_normalizer_test.dart, allergen_matcher_test.dart,
+│                 ingredient_marker_detector_test.dart
 ├── database/     test_database.dart (in-memory factory + builders),
-│                 allergen_term_dao_test.dart, product_dao_test.dart,
-│                 scan_dao_test.dart, settings_dao_test.dart
+│                 allergen_term_dao_test.dart, allergen_group_dao_test.dart,
+│                 product_dao_test.dart, scan_dao_test.dart,
+│                 settings_dao_test.dart, migration_test.dart (v1→v2)
 ├── services/     open_food_facts_service_test.dart (loopback HttpServer),
-│                 backup_service_test.dart (in-memory round trip)
+│                 translation_service_test.dart (loopback HttpServer),
+│                 backup_service_test.dart (in-memory round trip, incl.
+│                 photo entries and v1-archive backward compatibility),
+│                 scan_photo_service_test.dart (real temp directory)
+├── widgets/      highlighted_text_test.dart (pure segment-resolution logic)
+├── features/     scan_actions_test.dart (reevaluate carries name/shop/photo
+│                 forward — the regression test for §5.16's bug fix),
+│                 result/scan_result_screen_test.dart (match-group bucketing),
+│                 history/history_screen_test.dart (shop/day grouping)
 └── widget_test.dart   shell smoke test with every provider overridden
 ```
 
-A migration test is not present yet: `schemaVersion` is 1, so there is no
-`onUpgrade` step to exercise. The first schema change adds it.
+`migration_test.dart` is the app's first real `onUpgrade` exercise
+(`schemaVersion` 1 → 2, §5.15/§5.16): it hand-builds a minimal, representative
+v1 database with raw SQL (column naming/types confirmed empirically against
+this project's real Drift/sqlite3 versions rather than assumed) and opens it
+through the real `AppDatabase`, rather than using drift_dev's schema-snapshot
+tooling, which needs a `build.yaml` scaffold this project doesn't have yet.
 
 Strategy:
 
@@ -504,7 +610,16 @@ Strategy:
   serving recorded payloads — success, missing `ingredients_text`, unknown
   barcode, 429, 500 and a dropped connection — asserting the sealed result
   variant for each. No mocked `Dio`.
-- The backup round trip asserts that no credential ends up in the archive.
+- The backup round trip asserts that no credential ends up in the archive,
+  that an attached photo's bytes survive export/import, and that a
+  hand-built v1-shaped archive (no photo entries, no `name`/`shop`/
+  `photoPath` keys) still imports cleanly.
+- The ingredients-marker detector is tested the same rule-by-rule way as the
+  matcher, including a pinned "accepted limitations" group (a dropped OCR
+  colon, a marker split across a line break, an unsupported language) so a
+  future loosening of the rule is a deliberate, reviewable change.
+- `HighlightedText`'s segment-resolution logic is tested as a pure function,
+  with no widget pump, including the overlapping-range defensive-drop case.
 
 What is **not** tested, and why:
 

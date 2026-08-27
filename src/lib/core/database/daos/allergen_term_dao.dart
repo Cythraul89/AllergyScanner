@@ -19,7 +19,7 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
         (t) => OrderingTerm(expression: t.normalizedTerm),
       ]);
     return query.watch().map(
-      (rows) => rows.map(_toModel).toList(growable: false),
+      (rows) => rows.map(toModel).toList(growable: false),
     );
   }
 
@@ -28,7 +28,7 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
       ..where((t) => t.isActive.equals(true))
       ..orderBy([(t) => OrderingTerm(expression: t.normalizedTerm)]);
     return query.watch().map(
-      (rows) => rows.map(_toModel).toList(growable: false),
+      (rows) => rows.map(toModel).toList(growable: false),
     );
   }
 
@@ -37,14 +37,14 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
       ..where((t) => t.isActive.equals(true))
       ..orderBy([(t) => OrderingTerm(expression: t.normalizedTerm)]);
     final rows = await query.get();
-    return rows.map(_toModel).toList(growable: false);
+    return rows.map(toModel).toList(growable: false);
   }
 
   Future<AllergenTerm?> findById(String id) async {
     final row = await (select(
       allergenTerms,
     )..where((t) => t.id.equals(id))).getSingleOrNull();
-    return row == null ? null : _toModel(row);
+    return row == null ? null : toModel(row);
   }
 
   /// Used for the duplicate check before an insert (R4.1).
@@ -52,7 +52,7 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
     final row = await (select(allergenTerms)
           ..where((t) => t.normalizedTerm.equals(normalizedTerm)))
         .getSingleOrNull();
-    return row == null ? null : _toModel(row);
+    return row == null ? null : toModel(row);
   }
 
   Future<void> insertTerm(AllergenTerm term) {
@@ -63,6 +63,7 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
         normalizedTerm: term.normalizedTerm,
         isActive: Value(term.isActive),
         note: Value(term.note),
+        groupId: Value(term.groupId),
         createdAt: term.createdAt,
         updatedAt: term.updatedAt,
       ),
@@ -104,13 +105,36 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
     return (delete(allergenTerms)..where((t) => t.id.equals(id))).go();
   }
 
-  static AllergenTerm _toModel(AllergenTermRow row) {
+  Stream<List<AllergenTerm>> watchUngrouped() {
+    final query = select(allergenTerms)
+      ..where((t) => t.groupId.isNull())
+      ..orderBy([(t) => OrderingTerm(expression: t.normalizedTerm)]);
+    return query.watch().map((rows) => rows.map(toModel).toList(growable: false));
+  }
+
+  /// Assigns or clears (`groupId: null`) a term's group. Column-scoped like
+  /// setActive — never routed through a full-object save.
+  Future<void> setGroup({
+    required String id,
+    required String? groupId,
+    required DateTime updatedAt,
+  }) {
+    return (update(allergenTerms)..where((t) => t.id.equals(id))).write(
+      AllergenTermsCompanion(
+        groupId: Value(groupId),
+        updatedAt: Value(updatedAt),
+      ),
+    );
+  }
+
+  static AllergenTerm toModel(AllergenTermRow row) {
     return AllergenTerm(
       id: row.id,
       term: row.term,
       normalizedTerm: row.normalizedTerm,
       isActive: row.isActive,
       note: row.note,
+      groupId: row.groupId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );

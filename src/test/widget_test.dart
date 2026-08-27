@@ -6,7 +6,9 @@ import 'package:allergy_scanner/core/providers.dart';
 import 'package:allergy_scanner/core/services/backup_service.dart';
 import 'package:allergy_scanner/core/services/log_service.dart';
 import 'package:allergy_scanner/core/services/open_food_facts_service.dart';
+import 'package:allergy_scanner/core/services/scan_photo_service.dart';
 import 'package:allergy_scanner/core/services/text_recognition_service.dart';
+import 'package:allergy_scanner/core/services/translation_service.dart';
 import 'package:allergy_scanner/core/services/webdav_service.dart';
 import 'package:allergy_scanner/core/utils/app_version.dart';
 import 'package:allergy_scanner/core/utils/scan_capabilities.dart';
@@ -21,7 +23,11 @@ import 'database/test_database.dart';
 /// Every provider that would otherwise open a socket, a file or a platform
 /// channel is overridden — a missing override throws by design, which is what
 /// makes this test meaningful.
-List<Override> overridesFor(AppDatabase database, LogService log) {
+List<Override> overridesFor(
+  AppDatabase database,
+  LogService log,
+  ScanPhotoService scanPhotos,
+) {
   final Dio dio = Dio();
   return <Override>[
     appDatabaseProvider.overrideWithValue(database),
@@ -39,9 +45,13 @@ List<Override> overridesFor(AppDatabase database, LogService log) {
       const UnsupportedTextRecognitionService(),
     ),
     backupServiceProvider.overrideWithValue(
-      BackupService(database: database, log: log),
+      BackupService(database: database, log: log, scanPhotos: scanPhotos),
     ),
     webdavServiceProvider.overrideWithValue(WebdavService(log: log)),
+    translationServiceProvider.overrideWithValue(
+      TranslationService(dio: dio, log: log),
+    ),
+    scanPhotoServiceProvider.overrideWithValue(scanPhotos),
     secureStorageProvider.overrideWithValue(const FlutterSecureStorage()),
   ];
 }
@@ -49,6 +59,7 @@ List<Override> overridesFor(AppDatabase database, LogService log) {
 void main() {
   late AppDatabase database;
   late LogService log;
+  late ScanPhotoService scanPhotos;
 
   setUp(() {
     database = openTestDatabase();
@@ -60,12 +71,21 @@ void main() {
         ),
       ),
     );
+    scanPhotos = ScanPhotoService(
+      Directory(
+        path_helper.join(
+          Directory.systemTemp.path,
+          'allergy_scanner_widget_test_photos',
+        ),
+      ),
+      log: log,
+    );
   });
 
   Future<void> pumpApp(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: overridesFor(database, log),
+        overrides: overridesFor(database, log, scanPhotos),
         child: const AllergyScannerApp(),
       ),
     );

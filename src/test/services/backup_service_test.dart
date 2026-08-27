@@ -7,7 +7,9 @@ import 'package:allergy_scanner/core/models/app_settings.dart';
 import 'package:allergy_scanner/core/models/scan.dart';
 import 'package:allergy_scanner/core/services/backup_service.dart';
 import 'package:allergy_scanner/core/services/log_service.dart';
+import 'package:allergy_scanner/core/services/scan_photo_service.dart';
 import 'package:archive/archive.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path_helper;
 
@@ -16,6 +18,8 @@ import '../database/test_database.dart';
 void main() {
   late AppDatabase source;
   late LogService log;
+  late Directory photosDir;
+  late ScanPhotoService scanPhotos;
 
   setUp(() {
     source = openTestDatabase();
@@ -27,12 +31,23 @@ void main() {
         ),
       ),
     );
+    photosDir = Directory.systemTemp.createTempSync(
+      'allergy_scanner_backup_test_photos_',
+    );
+    scanPhotos = ScanPhotoService(photosDir, log: log);
   });
 
-  tearDown(() => source.close());
+  tearDown(() {
+    source.close();
+    if (photosDir.existsSync()) photosDir.deleteSync(recursive: true);
+  });
 
-  BackupService serviceFor(AppDatabase database) =>
-      BackupService(database: database, log: log, now: () => testTimestamp);
+  BackupService serviceFor(AppDatabase database) => BackupService(
+    database: database,
+    log: log,
+    scanPhotos: scanPhotos,
+    now: () => testTimestamp,
+  );
 
   Future<void> seed(AppDatabase database) async {
     await database.allergenTermDao.insertTerm(
@@ -169,6 +184,134 @@ void main() {
     // The dangling foreign key is dropped instead of failing the import.
     expect(result.scan.barcode, isNull);
     expect(result.scan.productNameSnapshot, 'Choco Bar');
+  });
+
+  test('export includes a photo entry only for scans that have one', () async {
+    await seed(source);
+    final File sourcePhoto = File(
+      path_helper.join(Directory.systemTemp.path, 'probe_photo.jpg'),
+    )..writeAsBytesSync(<int>[1, 2, 3, 4]);
+    addTearDown(() => sourcePhoto.deleteSync());
+    final String photoPath = await scanPhotos.attach(
+      scanId: 's1',
+      sourcePath: sourcePhoto.path,
+    );
+    await source.scanDao.updateDetails(
+      scanId: 's1',
+      photoPath: Value(photoPath),
+    );
+
+    final List<int> bytes = await serviceFor(source).exportToBytes();
+    final Archive archive = ZipDecoder().decodeBytes(bytes);
+
+    expect(archive.find(photoPath), isNotNull);
+    expect(
+      archive.files.where((ArchiveFile f) => f.name.startsWith('scan_photos/')),
+      hasLength(1),
+    );
+  });
+
+  test('a round trip restores an attached photo\'s bytes', () async {
+    await seed(source);
+    final File sourcePhoto = File(
+      path_helper.join(Directory.systemTemp.path, 'probe_photo2.jpg'),
+    )..writeAsBytesSync(<int>[9, 8, 7, 6, 5]);
+    addTearDown(() => sourcePhoto.deleteSync());
+    final String photoPath = await scanPhotos.attach(
+      scanId: 's1',
+      sourcePath: sourcePhoto.path,
+    );
+    await source.scanDao.updateDetails(
+      scanId: 's1',
+      photoPath: Value(photoPath),
+    );
+
+    final List<int> bytes = await serviceFor(source).exportToBytes();
+
+    final AppDatabase target = openTestDatabase();
+    addTearDown(target.close);
+    final Directory targetPhotosDir = Directory.systemTemp.createTempSync(
+      'allergy_scanner_backup_test_target_photos_',
+    );
+    addTearDown(() => targetPhotosDir.deleteSync(recursive: true));
+    final ScanPhotoService targetScanPhotos = ScanPhotoService(
+      targetPhotosDir,
+      log: log,
+    );
+    final BackupService targetService = BackupService(
+      database: target,
+      log: log,
+      scanPhotos: targetScanPhotos,
+      now: () => testTimestamp,
+    );
+
+    await targetService.importFromBytes(bytes);
+
+    final ScanResult result = (await target.scanDao.findResult('s1'))!;
+    expect(result.scan.photoPath, photoPath);
+    final File restored = await targetScanPhotos.resolve(photoPath);
+    expect(await restored.readAsBytes(), <int>[9, 8, 7, 6, 5]);
+  });
+
+  test('a v1-shaped archive (no name/shop/photoPath, no photos) still imports', () async {
+    final Map<String, Object?> payload = <String, Object?>{
+      'schemaVersion': source.schemaVersion,
+      'allergenTerms': const <Object?>[],
+      'products': const <Object?>[],
+      'scans': <Object?>[
+        <String, Object?>{
+          'id': 's9',
+          'scannedAt': testTimestamp.toIso8601String(),
+          'inputMode': 'barcode',
+          'evaluatedText': 'sugar, hazelnuts',
+          'verdict': 'hit',
+          'matchCount': 1,
+          // No 'name', 'shop' or 'photoPath' keys — exactly what a v1
+          // archive, written before those fields existed, looks like.
+        },
+      ],
+      'scanMatches': const <Object?>[],
+    };
+    final Archive archive = Archive()
+      ..add(ArchiveFile.string('data.json', jsonEncode(payload)))
+      ..add(
+        ArchiveFile.string(
+          'manifest.json',
+          jsonEncode(<String, Object?>{'backupFormatVersion': 1}),
+        ),
+      );
+
+    final ImportOutcome outcome = await serviceFor(
+      source,
+    ).importFromBytes(ZipEncoder().encode(archive));
+
+    expect(outcome.skipped, 0);
+    final ScanResult result = (await source.scanDao.findResult('s9'))!;
+    expect(result.scan.name, isNull);
+    expect(result.scan.shop, isNull);
+    expect(result.scan.photoPath, isNull);
+  });
+
+  test('an archive from a newer backup format is refused', () async {
+    final Map<String, Object?> payload = <String, Object?>{
+      'schemaVersion': source.schemaVersion,
+      'allergenTerms': const <Object?>[],
+    };
+    final Archive archive = Archive()
+      ..add(ArchiveFile.string('data.json', jsonEncode(payload)))
+      ..add(
+        ArchiveFile.string(
+          'manifest.json',
+          jsonEncode(<String, Object?>{
+            'backupFormatVersion': BackupService.backupFormatVersion + 1,
+          }),
+        ),
+      );
+
+    await expectLater(
+      serviceFor(source).importFromBytes(ZipEncoder().encode(archive)),
+      throwsA(isA<BackupFormatException>()),
+    );
   });
 
   test('an archive from a newer schema is refused', () async {

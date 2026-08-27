@@ -7,15 +7,19 @@
 > **Branch policy**: develop on `feature/**`, open PRs against `develop`. Never
 > push to `main` without explicit instruction.
 
-> **Current state**: as of 2026-08-20, `flutter create`, `pub get`,
-> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (91 tests)
-> all pass on Flutter 3.47.1 stable / Dart 3.13.1, Linux host — see "Platform
-> traps" below for what broke on the first run and the fixes applied.
-> `go_router` 17 and `archive` 4 are now exercised by the widget and backup
-> tests respectively. **Still unverified**: any real Android or iOS
+> **Current state**: as of 2026-08-27, `flutter create`, `pub get`,
+> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (158
+> tests) all pass on Flutter 3.47.1 stable / Dart 3.13.1, Linux host — see
+> "Platform traps" below for what broke on the first run and the fixes
+> applied. `go_router` 17 and `archive` 4 are exercised by the widget and
+> backup tests respectively. `schemaVersion` is now 2 (allergen groups,
+> `scans.name`/`shop`/`photoPath`) with the app's first real `onUpgrade`
+> step and migration test. **Still unverified**: any real Android or iOS
 > device/emulator build (no native toolchain has run against this project
 > yet), and therefore `mobile_scanner`, `drift_flutter`'s isolate behaviour,
-> and `share_plus`, none of which the current test suite exercises.
+> and `share_plus`, none of which the current test suite exercises — nor is
+> any of the new UI (group editing, the marker-gate preview, photo
+> attachment) manually verified on a real device.
 
 ---
 
@@ -74,30 +78,36 @@ src/
 │   ├── main.dart                    logger, DB, Dio, services, ProviderScope overrides
 │   ├── app.dart                     routerProvider (GoRouter) + AllergyScannerApp
 │   ├── core/
-│   │   ├── constants.dart           OFF contact/limits, cache TTL, history cap
+│   │   ├── constants.dart           contact/limits, cache TTL, history cap, MyMemory base URL
 │   │   ├── providers.dart           overridden singletons, DAO + read providers
 │   │   ├── database/
-│   │   │   ├── app_database.dart     @DriftDatabase, schemaVersion, onUpgrade
-│   │   │   ├── tables/               allergen_terms, products, scans, scan_matches, settings
+│   │   │   ├── app_database.dart     @DriftDatabase, schemaVersion (2), onUpgrade
+│   │   │   ├── tables/               allergen_terms, allergen_groups, products,
+│   │   │   │                        scans, scan_matches, settings
 │   │   │   └── daos/                 one per aggregate
 │   │   ├── models/                   immutable domain models, ScanInput (sealed), enums
 │   │   ├── calculators/
 │   │   │   ├── text_normalizer.dart  the ONE normalisation function
-│   │   │   └── allergen_matcher.dart pure matching + verdict + context excerpt
-│   │   ├── services/                 log, open_food_facts, text_recognition, backup, webdav
+│   │   │   ├── allergen_matcher.dart pure matching + verdict + context excerpt
+│   │   │   └── ingredient_marker_detector.dart  localized "Ingredients:" gate
+│   │   ├── services/                 log, open_food_facts, translation (MyMemory),
+│   │   │                             text_recognition, backup, scan_photo, webdav
 │   │   ├── utils/                    scan_capabilities, formatters, app_version
-│   │   └── widgets/                  error_view, empty_view, verdict_banner
+│   │   └── widgets/                  error_view, empty_view, verdict_banner, highlighted_text
 │   ├── features/
 │   │   ├── disclaimer/               the gate shown before the shell
 │   │   ├── scan/                     scan_screen, barcode_scan_screen,
 │   │   │                             text_capture_screen, text_review_screen,
 │   │   │                             manual_entry_screen, scan_actions.dart
-│   │   ├── result/                   scan_result_screen, product_edit_screen
-│   │   ├── allergies/                allergies_screen, term_edit_screen, actions
-│   │   ├── history/                  history_screen + providers
+│   │   ├── result/                   scan_result_screen, product_edit_screen,
+│   │   │                             scan_details_edit_screen (name/shop/photo)
+│   │   ├── allergies/                allergies_screen, term_edit_screen,
+│   │   │                             group_edit_screen, actions
+│   │   ├── history/                  history_screen (shop grouping) + providers
 │   │   └── settings/                 settings, about, privacy, logs, backup, sync
 │   └── shell/                        adaptive_shell, mobile_shell, desktop_shell
-└── test/                             calculators/, database/, services/, widget_test.dart
+└── test/                             calculators/, database/, services/, widgets/,
+                                       features/, widget_test.dart
 ```
 
 ---
@@ -132,8 +142,10 @@ missing override fails loudly instead of quietly opening a socket in a test:
 | `dioProvider` | `Dio` with 15 s timeouts and the Open Food Facts `User-Agent` |
 | `appVersionProvider` | `await AppVersion.load()` (falls back to `unknown`) |
 | `openFoodFactsServiceProvider` | `OpenFoodFactsService(dio:, log:)` |
+| `translationServiceProvider` | `TranslationService(dio:, log:)` (MyMemory — allergen group name suggestions) |
 | `textRecognitionServiceProvider` | `MlKitTextRecognitionService` where capable, else `UnsupportedTextRecognitionService` |
-| `backupServiceProvider` | `BackupService(database:, log:)` |
+| `backupServiceProvider` | `BackupService(database:, log:, scanPhotos:)` |
+| `scanPhotoServiceProvider` | `await ScanPhotoService.open(log:)` |
 | `webdavServiceProvider` | `WebdavService(log:)` |
 | `secureStorageProvider` | `const FlutterSecureStorage()` |
 | `scanCapabilitiesProvider` | `ScanCapabilities.forCurrentPlatform()` (has a default; overridden so router and bootstrap share one instance) |
@@ -314,14 +326,23 @@ fails:
 | File | What it covers |
 |---|---|
 | `test/calculators/text_normalizer_test.dart` | Accents, `ß` → `ss`, ligatures, punctuation and OCR newlines, whitespace collapsing, non-Latin scripts, idempotence, the 3-character floor |
-| `test/calculators/allergen_matcher_test.dart` | Every rule of REQUIREMENTS §5: the three verdicts, empty term list, offsets into the normalised text, one match per term, context excerpts, and the accepted `nut`/`coconut`, Latin-name and E-number limitations as pinned expectations |
+| `test/calculators/allergen_matcher_test.dart` | Every rule of REQUIREMENTS §5: the three verdicts, empty term list, offsets into the normalised text, one match per term, context excerpts, the accepted `nut`/`coconut`, Latin-name and E-number limitations, and two grouped synonyms still producing two matches, all as pinned expectations |
+| `test/calculators/ingredient_marker_detector_test.dart` | The four localized markers, case-insensitivity, optional space before the colon, earliest-marker-wins, section boundary, and accepted limitations (dropped colon, colon-as-semicolon, marker split across a line break, unsupported language) as pinned expectations |
 | `test/database/test_database.dart` | In-memory factory plus row builders shared by the DAO tests |
-| `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes |
+| `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes, `setGroup`, `watchUngrouped` |
+| `test/database/allergen_group_dao_test.dart` | Insert/find/rename, `watchAllWithTerms` bucketing, deleting a group ungroups (never deletes) its members |
 | `test/database/product_dao_test.dart` | Tag round trip, remote overwrite, manual override winning, staleness |
-| `test/database/scan_dao_test.dart` | Scan + matches in one write, `setNull` on term and product deletion, `cascade` on scan deletion, re-evaluation replacing matches, pruning, filtering |
+| `test/database/scan_dao_test.dart` | Scan + matches in one write, `setNull` on term and product deletion, `cascade` on scan deletion, re-evaluation replacing matches, pruning, filtering, `updateDetails` column-scoping, pruned/deleted rows' photo paths returned |
 | `test/database/settings_dao_test.dart` | Defaults without a row, `ensureDefaults`, column-scoped writes, no password column |
+| `test/database/migration_test.dart` | The v1→v2 `onUpgrade` step (allergen_groups + scans columns) against a hand-built v1 database |
 | `test/services/open_food_facts_service_test.dart` | Loopback `HttpServer`: mapping, language preference, 404, v3 and v2 not-found shapes, 429, 500, unexpected payload, unreachable server, throttling |
-| `test/services/backup_service_test.dart` | In-memory round trip, no credential in the archive, skip counting, newer-schema refusal, bad archives |
+| `test/services/translation_service_test.dart` | Loopback `HttpServer`: MyMemory success, exhausted-quota-as-transient, empty translation as not-found, 429/500, unexpected payload, unreachable server |
+| `test/services/backup_service_test.dart` | In-memory round trip, no credential in the archive, skip counting, newer-schema/newer-format refusal, bad archives, photo entries in/out, v1-archive backward compatibility |
+| `test/services/scan_photo_service_test.dart` | Attach/replace/delete/restore against a real temp directory, resolve keyed by basename |
+| `test/widgets/highlighted_text_test.dart` | Pure `resolveHighlightSegments`: no ranges, single range, boundary clamping, unsorted input, overlapping ranges dropped |
+| `test/features/scan_actions_test.dart` | `reevaluate` carries name/shop/photoPath forward — the regression test for the bug the history-details feature found |
+| `test/features/result/scan_result_screen_test.dart` | `bucketMatchesByGroup`: standalone vs. grouped matches, offset ordering |
+| `test/features/history/history_screen_test.dart` | `withShopGroups`/`withDayHeaders`: group ordering, "Ungrouped" bucketing, day-header interleaving |
 | `test/widget_test.dart` | Disclaimer gate, shell destinations, hidden camera entries with `ScanCapabilities.none()` |
 
 In-memory DB: `AppDatabase.forTesting(NativeDatabase.memory())` — foreign keys
@@ -380,4 +401,5 @@ Release: `git tag v1.0.0 && git push origin v1.0.0`.
 | Service | Endpoint | Auth | Notes |
 |---|---|---|---|
 | Open Food Facts | `GET https://world.openfoodfacts.org/api/v3/product/{barcode}.json?fields=…` | none | Custom `User-Agent` `AllergyScanner/<version> (<contact>)` is **mandatory**. Documented read limit 15 requests/min/IP — the client throttles locally and returns `OffTransient` instead of hammering. Timeouts 15 s. Response envelope of v3 must be confirmed against a live response; the field names in `doc/REQUIREMENTS.md` §6.2 come from the documented data model, not from a captured response. |
+| MyMemory | `GET https://api.mymemory.translated.net/get?q=…&langpair=…` | none (keyless; optional `de=<contact>` param for a higher quota) | Allergen group name translation *suggestions* only (REQUIREMENTS §4.1c) — the user reviews every suggestion before it becomes a term. Response shape confirmed against a live request during implementation: `responseData.translatedText`/`.match`, and a `quotaFinished: true` flag (not an HTTP error status) signals the daily quota running out, mapped to `TranslationTransient`. Gated on `remoteLookupEnabled`, same as Open Food Facts. |
 | Nextcloud / WebDAV | user-configured base URL | Basic auth; password in `flutter_secure_storage` | Optional. SHA-256 certificate fingerprint pinning for self-signed servers; a mismatch rejects the connection. |

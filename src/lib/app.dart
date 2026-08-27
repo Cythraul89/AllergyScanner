@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'core/providers.dart';
 import 'core/utils/scan_capabilities.dart';
 import 'features/allergies/allergies_screen.dart';
+import 'features/allergies/group_edit_screen.dart';
 import 'features/allergies/term_edit_screen.dart';
 import 'features/history/history_screen.dart';
 import 'features/result/product_edit_screen.dart';
+import 'features/result/scan_details_edit_screen.dart';
 import 'features/result/scan_result_screen.dart';
 import 'features/scan/barcode_scan_screen.dart';
 import 'features/scan/manual_entry_screen.dart';
@@ -85,6 +87,13 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
                               barcode: state.extra as String? ?? '',
                             ),
                       ),
+                      GoRoute(
+                        path: 'details',
+                        builder: (BuildContext context, GoRouterState state) =>
+                            ScanDetailsEditScreen(
+                              scanId: state.pathParameters['scanId']!,
+                            ),
+                      ),
                     ],
                   ),
                 ],
@@ -106,6 +115,17 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
                     builder: (BuildContext context, GoRouterState state) =>
                         TermEditScreen(
                           termId: state.pathParameters['termId'],
+                        ),
+                  ),
+                  GoRoute(
+                    path: 'groups/add',
+                    builder: (_, _) => const GroupEditScreen(),
+                  ),
+                  GoRoute(
+                    path: 'groups/:groupId/edit',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        GroupEditScreen(
+                          groupId: state.pathParameters['groupId'],
                         ),
                   ),
                 ],

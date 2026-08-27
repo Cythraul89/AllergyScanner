@@ -4,8 +4,10 @@ Companion to `doc/ARCHITECTURE.md`. This file shows who watches whom, and the
 signatures of the types that carry the app's logic. It is generated from the
 code by hand: when a signature changes, this file changes in the same commit.
 
-State: matches the source as written. Nothing has been compiled, so the
-signatures are the intent and the code — not a compiler's confirmation.
+State: matches the source as written and compiled — `flutter analyze
+--fatal-infos` and `flutter test` pass as of 2026-08-27 (see CLAUDE.md
+"Current state"), though only on the Flutter/Dart host toolchain; no native
+Android/iOS device build has run yet.
 
 ---
 
@@ -18,13 +20,15 @@ All of `■` and the DAO/read providers live in `lib/core/providers.dart`; the
 
 ```
 ■ appDatabaseProvider ──────────┬─► ○ allergenTermDaoProvider
-■ logServiceProvider            ├─► ○ productDaoProvider
-■ dioProvider ──┬───────────────┼─► ○ scanDaoProvider
-                │               └─► ○ settingsDaoProvider
-■ appVersionProvider            │
-■ openFoodFactsServiceProvider ─┘
+■ logServiceProvider            ├─► ○ allergenGroupDaoProvider
+■ dioProvider ──┬───────────────┼─► ○ productDaoProvider
+                │               ├─► ○ scanDaoProvider
+■ appVersionProvider            └─► ○ settingsDaoProvider
+■ openFoodFactsServiceProvider ─┤
+■ translationServiceProvider ───┘
 ■ textRecognitionServiceProvider
 ■ backupServiceProvider
+■ scanPhotoServiceProvider
 ■ webdavServiceProvider
 ■ secureStorageProvider
 ■ scanCapabilitiesProvider   (platform-derived default; overridden for one instance)
@@ -35,6 +39,8 @@ All of `■` and the DAO/read providers live in `lib/core/providers.dart`; the
 
 ○ allAllergenTermsProvider     StreamProvider<List<AllergenTerm>>
 ○ activeAllergenTermsProvider  StreamProvider<List<AllergenTerm>>
+○ allAllergenGroupsProvider    StreamProvider<List<AllergenGroupWithTerms>>  (features/allergies)
+○ ungroupedAllergenTermsProvider  StreamProvider<List<AllergenTerm>>  (features/allergies)
 ○ recentScansProvider          StreamProvider<List<Scan>>        (limit 3)
 ○ scanHistoryProvider          StreamProvider<List<Scan>>        ← historyFilterProvider
 ○ historyFilterProvider        StateProvider<ScanVerdict?>
@@ -44,10 +50,13 @@ All of `■` and the DAO/read providers live in `lib/core/providers.dart`; the
 
 ◆ scanActionsProvider          Provider<ScanActions>
      uses: allergenTermDao, productDao, scanDao, settingsDao,
-           openFoodFactsService, logService
+           openFoodFactsService, logService, scanPhotoService
 ◆ productActionsProvider       Provider<ProductActions>   → productDao, scanActions
+◆ scanDetailsActionsProvider   Provider<ScanDetailsActions>  → scanDao, scanPhotoService
 ◆ allergenTermActionsProvider  Provider<AllergenTermActions> → allergenTermDao
-◆ historyActionsProvider       Provider<HistoryActions>   → scanDao
+◆ allergenGroupActionsProvider Provider<AllergenGroupActions> → allergenGroupDao  (features/allergies)
+◆ translationSuggestionsProvider  Provider<TranslationSuggestionService> → translationService  (features/allergies)
+◆ historyActionsProvider       Provider<HistoryActions>   → scanDao, scanPhotoService
 ◆ backupActionsProvider        Provider<BackupActions>
      uses: backupService, webdavService, settingsDao, secureStorage, logService
 ```
@@ -76,12 +85,14 @@ Rules visible in the graph:
 | `ScanScreen` | `scanCapabilitiesProvider`, `activeAllergenTermsProvider`, `recentScansProvider` | — |
 | `BarcodeScanScreen` | — | `scanActionsProvider` |
 | `TextCaptureScreen` | — | `textRecognitionServiceProvider` |
-| `TextReviewScreen` | `scanCapabilitiesProvider` | `scanActionsProvider` |
+| `TextReviewScreen` | `scanCapabilitiesProvider`, `activeAllergenTermsProvider` | `scanActionsProvider` |
 | `ManualEntryScreen` | `scanCapabilitiesProvider` | `scanActionsProvider` |
-| `ScanResultScreen` | `scanResultProvider(scanId)`, `scanCapabilitiesProvider` | `scanDaoProvider` (delete) |
+| `ScanResultScreen` | `scanResultProvider(scanId)`, `scanCapabilitiesProvider`, `allAllergenTermsProvider` (match-group bucketing) | `historyActionsProvider` (delete), `scanPhotoServiceProvider` (thumbnail) |
 | `ProductEditScreen` | `scanCapabilitiesProvider` | `productDaoProvider` (initial load), `productActionsProvider` |
-| `AllergiesScreen` | `allAllergenTermsProvider` | `allergenTermActionsProvider` |
+| `ScanDetailsEditScreen` | — | `scanDaoProvider` (initial load), `scanDetailsActionsProvider`, `scanPhotoServiceProvider` |
+| `AllergiesScreen` | `allAllergenGroupsProvider`, `ungroupedAllergenTermsProvider` | `allergenTermActionsProvider` |
 | `TermEditScreen` | — | `allergenTermDaoProvider` (initial load), `allergenTermActionsProvider` |
+| `GroupEditScreen` | `allAllergenGroupsProvider`, `ungroupedAllergenTermsProvider`, `currentSettingsProvider` | `allergenGroupDaoProvider` (initial load), `allergenGroupActionsProvider`, `allergenTermActionsProvider`, `translationSuggestionsProvider` |
 | `HistoryScreen` | `scanHistoryProvider`, `historyFilterProvider` | `historyActionsProvider` |
 | `SettingsScreen` | `currentSettingsProvider` | `settingsDaoProvider` |
 | `SyncScreen` | `currentSettingsProvider` | `settingsDaoProvider`, `backupActionsProvider` |
@@ -177,15 +188,21 @@ class ScanActions {
     required SettingsDao settingsDao,
     required OpenFoodFactsService openFoodFacts,
     required LogService log,
+    required ScanPhotoService scanPhotos,
     Uuid uuid = const Uuid(),
     DateTime Function()? now,
   });
 
   /// The single pipeline (ARCHITECTURE §4.1): resolve → normalise → match →
-  /// persist scan + matches in one transaction → prune history.
+  /// persist scan + matches in one transaction → prune history (deleting any
+  /// pruned rows' photo files via [scanPhotos]).
   Future<ScanOutcome> evaluate(ScanInput input);
 
   /// Same, for an existing scan id — used after a product correction.
+  /// Carries the existing row's name/shop/photoPath forward (ARCHITECTURE
+  /// §5.16) — this is the fix for the bug the history-details feature found:
+  /// `ScanDao.insertWithMatches`'s `insertOnConflictUpdate` overwrites every
+  /// column it is given a value for.
   Future<ScanOutcome> reevaluate(String scanId);
 }
 
@@ -214,6 +231,24 @@ class TextInput extends ScanInput {
 }
 ```
 
+### 2.4a `IngredientMarkerDetector` — `core/calculators/ingredient_marker_detector.dart`
+
+```dart
+class IngredientMarkerDetector {
+  /// Scans raw (unnormalised) text for a localised "Ingredients:" header —
+  /// English, German, French (accent optional), Italian. Colon required
+  /// (REQUIREMENTS R5.8). Pure, no I/O.
+  static MarkerDetectionResult detect(String rawText);
+}
+
+sealed class MarkerDetectionResult {}
+final class MarkerFound extends MarkerDetectionResult {
+  final String matchedMarker;   // literal text as found, e.g. "Zutaten:"
+  final String sectionText;     // marker end → end of text, left-trimmed
+}
+final class MarkerNotFound extends MarkerDetectionResult {}
+```
+
 ### 2.5 `OpenFoodFactsService` — `core/services/open_food_facts_service.dart`
 
 ```dart
@@ -240,6 +275,37 @@ final class OffFailure   extends OffResult { final String message; }
 
 `OffNotFound` and `OffTransient` are distinct by design — ARCHITECTURE §5.7.
 
+### 2.5a `TranslationService` — `core/services/translation_service.dart`
+
+```dart
+class TranslationService {
+  TranslationService({
+    required Dio dio,
+    required LogService log,
+    String baseUrl = kMyMemoryBaseUrl,
+    String? contactEmail = kAppContactEmail,
+  });
+
+  /// Never throws. Not throttled (unlike OpenFoodFactsService — this is
+  /// called rarely, on an explicit "Suggest translations" tap, not on
+  /// every scan). [sourceLanguage]/[targetLanguage] are ISO 639-1 codes.
+  Future<TranslationResult> translate({
+    required String text,
+    required String sourceLanguage,
+    required String targetLanguage,
+  });
+}
+
+sealed class TranslationResult {}
+final class TranslationSuccess extends TranslationResult {
+  final String translatedText;
+  final double? quality;   // best-effort, never gates acceptance
+}
+final class TranslationNotFound extends TranslationResult {}   // rarely returned by MyMemory in practice
+final class TranslationTransient extends TranslationResult {}  // quota exhausted, 5xx, unreachable
+final class TranslationFailure extends TranslationResult { final String message; }
+```
+
 ### 2.6 `TextRecognitionService` — `core/services/text_recognition_service.dart`
 
 ```dart
@@ -253,13 +319,21 @@ class MlKitTextRecognitionService implements TextRecognitionService { … }   //
 class UnsupportedTextRecognitionService implements TextRecognitionService { … }
 ```
 
-### 2.7 `BackupService` and `WebdavService`
+### 2.7 `BackupService`, `ScanPhotoService` and `WebdavService`
 
 ```dart
 class BackupService {
-  BackupService({required AppDatabase database, required LogService log, DateTime Function()? now});
+  BackupService({
+    required AppDatabase database,
+    required LogService log,
+    required ScanPhotoService scanPhotos,
+    DateTime Function()? now,
+  });
 
-  static const int backupFormatVersion = 1;
+  /// v2: scans gained name/shop/photoPath, and one raw-bytes archive entry
+  /// per attached photo (named after its own photoPath, not base64-in-JSON).
+  /// A v1 archive still imports — those fields are simply absent.
+  static const int backupFormatVersion = 2;
   static String archiveFileName(DateTime at);   // allergy_scanner_YYYYMMDD_HHmmss.zip
 
   Future<List<int>> exportToBytes();            // testable without path_provider
@@ -269,6 +343,22 @@ class BackupService {
 }
 
 class ImportOutcome { final int imported; final int skipped; bool get hasSkipped; }
+
+class ScanPhotoService {
+  ScanPhotoService(Directory directory, {required LogService log});
+  static Future<ScanPhotoService> open({required LogService log});  // <documents>/scan_photos
+
+  /// Copies the source file in, keyed by scanId; returns the path to store
+  /// in scans.photoPath.
+  Future<String> attach({required String scanId, required String sourcePath});
+  /// Keyed by photoPath's basename within this service's own directory —
+  /// not by calling getApplicationDocumentsDirectory() again, so this is
+  /// correct however the service was constructed (ARCHITECTURE §5.16).
+  Future<File> resolve(String photoPath);
+  Future<void> restoreFromBytes({required String photoPath, required List<int> bytes});  // backup import
+  Future<void> delete(String photoPath);       // best-effort, log-and-swallow
+  Future<void> deleteMany(Iterable<String> photoPaths);
+}
 
 class WebdavService {
   WebdavService({required LogService log, WebdavClientFactory? clientFactory});
@@ -294,7 +384,18 @@ class AllergenTerm {                  // Equatable, const, copyWith
   final String id, term, normalizedTerm;
   final bool isActive;
   final String? note;
+  final String? groupId;              // null = ungrouped; set via setGroup, not copyWith
   final DateTime createdAt, updatedAt;
+}
+
+class AllergenGroup {                 // Equatable, const
+  final String id, label;
+  final DateTime createdAt, updatedAt;
+}
+
+class AllergenGroupWithTerms {        // in-memory composite, never persisted
+  final AllergenGroup group;
+  final List<AllergenTerm> terms;
 }
 
 class Product {
@@ -320,6 +421,7 @@ class Scan {
   final String evaluatedText;
   final ScanVerdict verdict;
   final int matchCount;
+  final String? name, shop, photoPath;  // set after the fact via Edit details
   bool get isBarcodeScan;
 }
 
@@ -367,6 +469,19 @@ class AllergenTermDao {
   });
   Future<void> setActive({required String id, required bool isActive, required DateTime updatedAt});
   Future<void> deleteById(String id);
+  Stream<List<AllergenTerm>> watchUngrouped();
+  Future<void> setGroup({required String id, required String? groupId, required DateTime updatedAt});
+  static AllergenTerm toModel(AllergenTermRow row);   // public: reused by AllergenGroupDao
+}
+
+class AllergenGroupDao {
+  /// One left-joined query — every group and its members in one stream
+  /// event, same reasoning as ScanDao.watchResult.
+  Stream<List<AllergenGroupWithTerms>> watchAllWithTerms();
+  Future<AllergenGroup?> findById(String id);
+  Future<void> insertGroup(AllergenGroup group);
+  Future<void> updateLabel({required String id, required String label, required DateTime updatedAt});
+  Future<void> deleteById(String id);   // members survive, ungrouped (FK setNull)
 }
 
 class ProductDao {
@@ -384,11 +499,19 @@ class ScanDao {
   Stream<List<Scan>> watchHistory({ScanVerdict? verdict});
   Stream<ScanResult?> watchResult(String scanId);   // one left-joined query
   Future<ScanResult?> findResult(String scanId);
-  Future<String> insertWithMatches({
+  /// One transaction, then prune. Returns the pruned rows' photo paths —
+  /// ScanDao stays DB-only, the caller owns file deletion (ARCHITECTURE §5.16).
+  Future<({String scanId, List<String> prunedPhotoPaths})> insertWithMatches({
     required Scan scan, required List<ScanMatch> matches, int historyLimit = 500,
-  });                                              // one transaction, then prune
-  Future<void> deleteById(String id);
-  Future<void> deleteAll();
+  });
+  /// Column-scoped: touches only name/shop/photoPath, never evaluatedText or
+  /// verdict.
+  Future<void> updateDetails({
+    required String scanId,
+    Value<String?> name, Value<String?> shop, Value<String?> photoPath,
+  });
+  Future<Scan?> deleteById(String id);    // returns the deleted row, or null
+  Future<List<Scan>> deleteAll();         // returns every deleted row
   Future<List<Scan>> getAll();
   Future<List<ScanMatch>> getAllMatches();
 }
@@ -425,10 +548,13 @@ MaterialApp.router(routerConfig: ref.watch(routerProvider))
         │              ├── /scan/review           extra: recognised text
         │              ├── /scan/manual
         │              └── /scan/result/:scanId   extra: ScanLookupProblem?
-        │                  └── product            extra: barcode
+        │                  ├── product            extra: barcode
+        │                  └── details            name/shop/photo (§5.16)
         ├── branch 1 → /allergies
         │              ├── /allergies/add
-        │              └── /allergies/:termId/edit
+        │              ├── /allergies/:termId/edit
+        │              ├── /allergies/groups/add
+        │              └── /allergies/groups/:groupId/edit
         ├── branch 2 → /history
         │              └── /history/:scanId       ScanResultScreen (same widget)
         └── branch 3 → /settings

@@ -47,7 +47,11 @@ class AllergenTermActions {
   final Uuid _uuid;
   final DateTime Function() _now;
 
-  Future<TermSaveResult> add({required String term, String? note}) async {
+  Future<TermSaveResult> add({
+    required String term,
+    String? note,
+    String? groupId,
+  }) async {
     final String normalized = TextNormalizer.normalize(term);
     if (!TextNormalizer.isSearchable(normalized)) {
       return const TermTooShort(TextNormalizer.minimumTermLength);
@@ -66,6 +70,7 @@ class AllergenTermActions {
         normalizedTerm: normalized,
         isActive: true,
         note: note,
+        groupId: groupId,
         createdAt: timestamp,
         updatedAt: timestamp,
       ),
@@ -102,6 +107,10 @@ class AllergenTermActions {
 
   Future<void> setActive({required String id, required bool isActive}) =>
       _dao.setActive(id: id, isActive: isActive, updatedAt: _now());
+
+  /// Assigns ([groupId] non-null) or ungroups ([groupId] null) a term.
+  Future<void> setGroup({required String id, required String? groupId}) =>
+      _dao.setGroup(id: id, groupId: groupId, updatedAt: _now());
 
   /// Deleting a term never touches history: past matches keep their snapshot
   /// and their foreign key is cleared (R7.9).

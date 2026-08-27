@@ -3,10 +3,12 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 
 import '../models/enums.dart';
+import 'daos/allergen_group_dao.dart';
 import 'daos/allergen_term_dao.dart';
 import 'daos/product_dao.dart';
 import 'daos/scan_dao.dart';
 import 'daos/settings_dao.dart';
+import 'tables/allergen_groups_table.dart';
 import 'tables/allergen_terms_table.dart';
 import 'tables/products_table.dart';
 import 'tables/scan_matches_table.dart';
@@ -22,8 +24,15 @@ part 'app_database.g.dart';
 /// setup. It opens on the calling isolate by default — `shareAcrossIsolates` is
 /// deliberately not enabled, since nothing here runs in a background isolate.
 @DriftDatabase(
-  tables: [AllergenTerms, Products, Scans, ScanMatches, SettingsEntries],
-  daos: [AllergenTermDao, ProductDao, ScanDao, SettingsDao],
+  tables: [
+    AllergenTerms,
+    AllergenGroups,
+    Products,
+    Scans,
+    ScanMatches,
+    SettingsEntries,
+  ],
+  daos: [AllergenTermDao, AllergenGroupDao, ProductDao, ScanDao, SettingsDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'allergy_scanner'));
@@ -32,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -40,8 +49,17 @@ class AppDatabase extends _$AppDatabase {
       await migrator.createAll();
     },
     onUpgrade: (Migrator migrator, int from, int to) async {
-      // schemaVersion is still 1 — no step exists yet. Every future change adds
-      // an `if (from < N) { ... }` block here.
+      if (from < 2) {
+        // Allergen groups: an organisational layer over existing terms,
+        // added nullable so every pre-existing term simply starts ungrouped.
+        await migrator.createTable(allergenGroups);
+        await migrator.addColumn(allergenTerms, allergenTerms.groupId);
+        // History details, added after the fact via "Edit details" — never
+        // touch evaluatedText/verdict, so R4.7's snapshot guarantee holds.
+        await migrator.addColumn(scans, scans.name);
+        await migrator.addColumn(scans, scans.shop);
+        await migrator.addColumn(scans, scans.photoPath);
+      }
       //
       // Reminder: changing TextNormalizer means recomputing
       // allergen_terms.normalized_term for every row in such a block, or

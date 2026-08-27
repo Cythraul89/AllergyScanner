@@ -14,6 +14,7 @@ import '../../core/models/scan.dart';
 import '../../core/models/scan_input.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/open_food_facts_service.dart';
+import '../../core/services/scan_photo_service.dart';
 
 /// Why a barcode could not be resolved. Only relevant for the live result view;
 /// history stores the verdict, not the reason.
@@ -44,6 +45,7 @@ class ScanActions {
     required SettingsDao settingsDao,
     required OpenFoodFactsService openFoodFacts,
     required LogService log,
+    required ScanPhotoService scanPhotos,
     Uuid uuid = const Uuid(),
     DateTime Function()? now,
   }) : _allergenTermDao = allergenTermDao,
@@ -52,6 +54,7 @@ class ScanActions {
        _settingsDao = settingsDao,
        _openFoodFacts = openFoodFacts,
        _log = log,
+       _scanPhotos = scanPhotos,
        _uuid = uuid,
        _now = now ?? DateTime.now;
 
@@ -61,6 +64,7 @@ class ScanActions {
   final SettingsDao _settingsDao;
   final OpenFoodFactsService _openFoodFacts;
   final LogService _log;
+  final ScanPhotoService _scanPhotos;
   final Uuid _uuid;
   final DateTime Function() _now;
 
@@ -112,6 +116,13 @@ class ScanActions {
         mode: scan.inputMode,
         barcode: barcode,
         product: product,
+        // Carried forward from the row being re-evaluated — these are set
+        // after the fact via "Edit details" and a product correction must
+        // not silently wipe them (insertWithMatches's insertOnConflictUpdate
+        // overwrites every column not explicitly set).
+        name: scan.name,
+        shop: scan.shop,
+        photoPath: scan.photoPath,
       ),
     );
   }
@@ -198,20 +209,25 @@ class ScanActions {
         .toList(growable: false);
 
     // Written before the result view opens, so a crash cannot lose it (R7.7).
-    await _scanDao.insertWithMatches(
-      scan: Scan(
-        id: scanId,
-        scannedAt: scannedAt,
-        inputMode: resolved.mode,
-        barcode: resolved.barcode,
-        productNameSnapshot: resolved.product?.productName,
-        evaluatedText: resolved.text,
-        verdict: outcome.verdict,
-        matchCount: matches.length,
-      ),
-      matches: matches,
-      historyLimit: kMaxScanHistory,
-    );
+    final ({String scanId, List<String> prunedPhotoPaths}) written =
+        await _scanDao.insertWithMatches(
+          scan: Scan(
+            id: scanId,
+            scannedAt: scannedAt,
+            inputMode: resolved.mode,
+            barcode: resolved.barcode,
+            productNameSnapshot: resolved.product?.productName,
+            evaluatedText: resolved.text,
+            verdict: outcome.verdict,
+            matchCount: matches.length,
+            name: resolved.name,
+            shop: resolved.shop,
+            photoPath: resolved.photoPath,
+          ),
+          matches: matches,
+          historyLimit: kMaxScanHistory,
+        );
+    await _scanPhotos.deleteMany(written.prunedPhotoPaths);
 
     _log.info(
       'Scan $scanId: ${outcome.verdict.name}, ${matches.length} match(es), '
@@ -230,6 +246,9 @@ class _Resolved {
     this.barcode,
     this.product,
     this.problem,
+    this.name,
+    this.shop,
+    this.photoPath,
   });
 
   final String text;
@@ -237,4 +256,7 @@ class _Resolved {
   final String? barcode;
   final Product? product;
   final ScanLookupProblem? problem;
+  final String? name;
+  final String? shop;
+  final String? photoPath;
 }
