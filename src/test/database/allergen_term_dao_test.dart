@@ -1,4 +1,5 @@
 import 'package:allergy_scanner/core/database/app_database.dart';
+import 'package:allergy_scanner/core/models/allergen_group.dart';
 import 'package:allergy_scanner/core/models/allergen_term.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -131,6 +132,39 @@ void main() {
       't1',
     ]);
   });
+
+  test(
+    'setActiveForGroup cascades to every member and leaves other terms alone',
+    () async {
+      await database.allergenGroupDao.insertGroup(
+        AllergenGroup(
+          id: 'g1',
+          label: 'Milk',
+          createdAt: testTimestamp,
+          updatedAt: testTimestamp,
+        ),
+      );
+      await database.allergenTermDao.insertTerm(
+        buildTerm(id: 't1', term: 'Milk', normalizedTerm: 'milk', groupId: 'g1'),
+      );
+      await database.allergenTermDao.insertTerm(
+        buildTerm(id: 't2', term: 'Lait', normalizedTerm: 'lait', groupId: 'g1'),
+      );
+      await database.allergenTermDao.insertTerm(
+        buildTerm(id: 't3', term: 'Celery', normalizedTerm: 'celery'),
+      );
+
+      await database.allergenTermDao.setActiveForGroup(
+        groupId: 'g1',
+        isActive: false,
+        updatedAt: testTimestamp,
+      );
+
+      expect((await database.allergenTermDao.findById('t1'))!.isActive, isFalse);
+      expect((await database.allergenTermDao.findById('t2'))!.isActive, isFalse);
+      expect((await database.allergenTermDao.findById('t3'))!.isActive, isTrue);
+    },
+  );
 
   test('deleteById removes the term', () async {
     await database.allergenTermDao.insertTerm(

@@ -396,6 +396,7 @@ class AllergenGroup {                 // Equatable, const
 class AllergenGroupWithTerms {        // in-memory composite, never persisted
   final AllergenGroup group;
   final List<AllergenTerm> terms;
+  bool get isActive;                  // true iff every member is active (R4.1d)
 }
 
 class Product {
@@ -471,6 +472,7 @@ class AllergenTermDao {
   Future<void> deleteById(String id);
   Stream<List<AllergenTerm>> watchUngrouped();
   Future<void> setGroup({required String id, required String? groupId, required DateTime updatedAt});
+  Future<void> setActiveForGroup({required String groupId, required bool isActive, required DateTime updatedAt});
   static AllergenTerm toModel(AllergenTermRow row);   // public: reused by AllergenGroupDao
 }
 

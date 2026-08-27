@@ -19,6 +19,35 @@ void main() {
         updatedAt: testTimestamp,
       );
 
+  test('AllergenGroupWithTerms.isActive is true for a group with no members yet', () {
+    expect(
+      AllergenGroupWithTerms(group: group(), terms: const []).isActive,
+      isTrue,
+    );
+  });
+
+  test('AllergenGroupWithTerms.isActive is true only when every member is active', () {
+    final AllergenTerm active = buildTerm(
+      id: 't1',
+      term: 'Milk',
+      normalizedTerm: 'milk',
+    );
+    final AllergenTerm inactive = buildTerm(
+      id: 't2',
+      term: 'Lait',
+      normalizedTerm: 'lait',
+      isActive: false,
+    );
+    expect(
+      AllergenGroupWithTerms(group: group(), terms: [active]).isActive,
+      isTrue,
+    );
+    expect(
+      AllergenGroupWithTerms(group: group(), terms: [active, inactive]).isActive,
+      isFalse,
+    );
+  });
+
   test('inserts and finds a group by id', () async {
     await database.allergenGroupDao.insertGroup(group());
     final AllergenGroup? found = await database.allergenGroupDao.findById(

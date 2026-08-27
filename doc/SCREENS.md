@@ -484,12 +484,12 @@ flat active/inactive rendering, unchanged.
 ┌────────────────────────────────────────┐
 │ My allergy terms              [📁] [🔍]│
 ├────────────────────────────────────────┤
-│  Hazelnut                        ›     │
-│    hazelnut                      [●]   │
-│    haselnuss                     [●]   │
-│  Milk                            ›     │
-│    milk                          [●]   │
-│    lait                          [●]   │
+│  Hazelnut                     [●] ›    │
+│    hazelnut                            │
+│    haselnuss                           │
+│  Milk                         [●] ›    │
+│    milk                                │
+│    lait                                │
 │                                        │
 │  OTHER TERMS                           │
 │  ─────────────────────────────────────  │
@@ -503,9 +503,11 @@ flat active/inactive rendering, unchanged.
 └────────────────────────────────────────┘
 ```
 
-The `[📁]` AppBar action opens *Add a group*; tapping a group header opens
-*Edit group* (below). Search matches a group's label, any of its members'
-text, or an ungrouped term's text.
+The active toggle sits on the group header, not on its members (R4.1d) — a
+group is one substance, so "hazelnut" on and "haselnuss" off at the same time
+is not a state the UI offers. The `[📁]` AppBar action opens *Add a group*;
+tapping a group header opens *Edit group* (below). Search matches a group's
+label, any of its members' text, or an ungrouped term's text.
 
 ### Add / edit screen
 
@@ -542,7 +544,9 @@ navigation story and a deep link can reach it.
 
 ### Group edit screen
 
-`/allergies/groups/add`, `/allergies/groups/:groupId/edit`.
+`/allergies/groups/add`, `/allergies/groups/:groupId/edit` — the same screen
+either way: adding a group has the full member-management UI from the start,
+not a label-only first step [R4.1e].
 
 ```
 ┌────────────────────────────────────────┐
@@ -561,6 +565,8 @@ navigation story and a deep link can reach it.
 │  │ noisette               │  │ FR │     │
 │  └───────────────────────┘  └────┘     │
 │  [Add]  [🌐 Suggest translations]      │
+│  [DE: Haselnuss] [IT: Nocciola]        │
+│  [Add all (2)]                         │
 │                                        │
 │         [Cancel]        [Save]         │
 └────────────────────────────────────────┘
@@ -570,16 +576,25 @@ navigation story and a deep link can reach it.
 
 - The label is not matched and not required to be unique — it is only ever
   shown as the group header [§4.1a].
+- Adding a group (no `groupId` yet) collects names locally in the screen —
+  nothing is written until `Save`, so cancelling never leaves an empty group
+  behind [R4.1e]. Editing an existing group writes each name immediately, as
+  before.
 - Removing a name chip ungroups that term (`groupId → null`); it is **never**
   deleted [R4.1b]. Deleting the whole group (🗑) has the same effect on every
-  member, with a confirmation naming that.
+  member, with a confirmation naming that. *Attach an existing term* only
+  appears once the group exists (edit mode) — there is nothing yet to attach
+  to while still adding.
 - *Suggest translations* calls MyMemory for the other three of DE/EN/FR/IT,
-  shown as tappable chips that pre-fill the add field — nothing is ever
-  inserted automatically, every suggestion still goes through the same
-  duplicate/length checks as any other term [R4.1c]. Hidden/disabled with an
-  explanatory line when *Look up products online* is off, exactly like every
-  other online feature [R6.6].
-- Under 3 normalised characters → `Save` stays disabled [R4.2/R5.5].
+  shown as tappable chips that pre-fill the add field, or added all at once
+  with *Add all* — nothing is ever inserted automatically without going
+  through the same duplicate/length checks as any other term [R4.1c].
+  Hidden/disabled with an explanatory line when *Look up products online* is
+  off, exactly like every other online feature [R6.6].
+- Under 3 normalised characters → rejected inline, same message whether the
+  group exists yet or not [R4.2/R5.5].
+- A name added here — new or attached — adopts the group's current
+  active/inactive state; there is no separate toggle for a member [R4.1d].
 - The ⓘ note is required copy, not decoration — it is the user-facing form of
   the §5.4 limitation.
 - Empty state: explanatory text + a prominent `Add your first term`.

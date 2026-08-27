@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/calculators/text_normalizer.dart';
 import '../../core/constants.dart';
 import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
@@ -10,8 +11,25 @@ import '../../core/services/translation_service.dart';
 import 'allergen_group_providers.dart';
 import 'allergies_providers.dart';
 
+/// A name typed or suggested while adding a brand-new group, held only in
+/// widget state until Save — a new group is not written to the database a
+/// row at a time, so cancelling never leaves an orphaned group behind.
+typedef _DraftMember = ({String term, String language});
+
+/// Whether every member of the group named [groupId] shares one
+/// active/inactive state — the source of truth for the cascading toggle
+/// (a group represents one substance, so it is never partially active).
+bool _groupIsActive(List<AllergenGroupWithTerms> all, String groupId) {
+  final Iterable<AllergenGroupWithTerms> matches = all.where(
+    (AllergenGroupWithTerms g) => g.group.id == groupId,
+  );
+  return matches.isEmpty || matches.first.isActive;
+}
+
 /// Add or edit an allergen group: a label plus its member terms (different
-/// names/translations for the same substance).
+/// names/translations for the same substance). The same full editing
+/// experience — members, attaching existing terms, translation suggestions —
+/// is available whether the group already exists or is still being created.
 class GroupEditScreen extends ConsumerStatefulWidget {
   const GroupEditScreen({this.groupId, super.key});
 
@@ -34,6 +52,9 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
   String? _newTermError;
   String _newTermLanguage = 'en';
   Map<String, TranslationResult>? _suggestions;
+
+  /// Only populated while adding a brand-new group (§ typedef above).
+  final List<_DraftMember> _draftMembers = <_DraftMember>[];
 
   bool get _isEditing => widget.groupId != null;
 
@@ -67,6 +88,16 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
       _labelController.text = group?.label ?? '';
       _loading = false;
     });
+  }
+
+  /// The state new/re-assigned members must adopt — a group's names are
+  /// always toggled together, never individually.
+  bool _currentGroupIsActive() {
+    final String? id = widget.groupId;
+    if (id == null) return true;
+    final List<AllergenGroupWithTerms> all =
+        ref.read(allAllergenGroupsProvider).valueOrNull ?? const [];
+    return _groupIsActive(all, id);
   }
 
   @override
@@ -108,34 +139,28 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
             ),
             onChanged: (_) => setState(() => _labelError = null),
           ),
+          const SizedBox(height: 24),
+          Text('Names in this group', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          _isEditing ? _MemberList(groupId: widget.groupId!) : _buildDraftMembers(),
           if (_isEditing) ...<Widget>[
-            const SizedBox(height: 24),
-            Text(
-              'Names in this group',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            _MemberList(groupId: widget.groupId!),
             const SizedBox(height: 8),
             _AttachExistingTerm(groupId: widget.groupId!),
-            const SizedBox(height: 24),
-            Text(
-              'Add a new name',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            _buildAddTermRow(remoteLookupEnabled),
-            if (!remoteLookupEnabled)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  'Translation suggestions need remote lookup, which is '
-                  'turned off in Settings.',
-                  style: TextStyle(fontStyle: FontStyle.italic),
-                ),
-              ),
-            if (_suggestions != null) _buildSuggestions(),
           ],
+          const SizedBox(height: 24),
+          Text('Add a new name', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          _buildAddTermRow(remoteLookupEnabled),
+          if (!remoteLookupEnabled)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Translation suggestions need remote lookup, which is '
+                'turned off in Settings.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ),
+          if (_suggestions != null) _buildSuggestions(),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -153,6 +178,24 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDraftMembers() {
+    if (_draftMembers.isEmpty) {
+      return const Text('No names yet.');
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _draftMembers
+          .map(
+            (_DraftMember member) => InputChip(
+              label: Text(member.term),
+              onDeleted: () => setState(() => _draftMembers.remove(member)),
+            ),
+          )
+          .toList(growable: false),
     );
   }
 
@@ -230,33 +273,54 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     }
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: successes
-            .map(
-              (entry) => ActionChip(
-                label: Text(
-                  '${entry.key.toUpperCase()}: ${entry.value.translatedText}',
-                ),
-                onPressed: () => setState(() {
-                  _newTermController.text = entry.value.translatedText;
-                  _newTermLanguage = entry.key;
-                  _suggestions = null;
-                }),
-              ),
-            )
-            .toList(growable: false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: successes
+                .map(
+                  (entry) => ActionChip(
+                    label: Text(
+                      '${entry.key.toUpperCase()}: ${entry.value.translatedText}',
+                    ),
+                    onPressed: () => setState(() {
+                      _newTermController.text = entry.value.translatedText;
+                      _newTermLanguage = entry.key;
+                      _suggestions = null;
+                    }),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: _addingTerm ? null : _addAllSuggestions,
+            child: Text('Add all (${successes.length})'),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _addTerm() async {
-    if (_newTermController.text.trim().isEmpty) return;
+    final String text = _newTermController.text;
+    if (text.trim().isEmpty) return;
+
+    if (!_isEditing) {
+      _addDraft(term: text, language: _newTermLanguage);
+      return;
+    }
+
     setState(() => _addingTerm = true);
     final TermSaveResult result = await ref
         .read(allergenTermActionsProvider)
-        .add(term: _newTermController.text, groupId: widget.groupId);
+        .add(
+          term: text,
+          groupId: widget.groupId,
+          isActive: _currentGroupIsActive(),
+        );
     if (!mounted) return;
     switch (result) {
       case TermSaved():
@@ -278,6 +342,32 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     }
   }
 
+  /// Add-mode only: validates and appends to the local draft list, with no
+  /// database write yet — duplicates against *other, already-saved* groups
+  /// or terms only surface at Save time (§_save).
+  void _addDraft({required String term, required String language}) {
+    final String normalized = TextNormalizer.normalize(term);
+    if (!TextNormalizer.isSearchable(normalized)) {
+      setState(
+        () => _newTermError =
+            'Use at least ${TextNormalizer.minimumTermLength} characters.',
+      );
+      return;
+    }
+    final bool duplicate = _draftMembers.any(
+      (_DraftMember m) => TextNormalizer.normalize(m.term) == normalized,
+    );
+    if (duplicate) {
+      setState(() => _newTermError = 'Already added.');
+      return;
+    }
+    setState(() {
+      _draftMembers.add((term: term.trim(), language: language));
+      _newTermController.clear();
+      _suggestions = null;
+    });
+  }
+
   Future<void> _suggestTranslations() async {
     final String text = _newTermController.text.trim();
     if (text.isEmpty) return;
@@ -296,6 +386,76 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     });
   }
 
+  Future<void> _addAllSuggestions() async {
+    final Map<String, TranslationResult> suggestions = _suggestions ?? {};
+    final List<MapEntry<String, TranslationSuccess>> successes = suggestions
+        .entries
+        .where((entry) => entry.value is TranslationSuccess)
+        .map(
+          (entry) =>
+              MapEntry(entry.key, entry.value as TranslationSuccess),
+        )
+        .toList(growable: false);
+    if (successes.isEmpty) return;
+
+    setState(() => _addingTerm = true);
+    int added = 0;
+    int skipped = 0;
+
+    if (_isEditing) {
+      final bool groupActive = _currentGroupIsActive();
+      for (final MapEntry<String, TranslationSuccess> entry in successes) {
+        final TermSaveResult result = await ref
+            .read(allergenTermActionsProvider)
+            .add(
+              term: entry.value.translatedText,
+              groupId: widget.groupId,
+              isActive: groupActive,
+            );
+        if (result is TermSaved) {
+          added++;
+        } else {
+          skipped++;
+        }
+      }
+    } else {
+      for (final MapEntry<String, TranslationSuccess> entry in successes) {
+        final String normalized = TextNormalizer.normalize(
+          entry.value.translatedText,
+        );
+        final bool duplicate =
+            !TextNormalizer.isSearchable(normalized) ||
+            _draftMembers.any(
+              (_DraftMember m) =>
+                  TextNormalizer.normalize(m.term) == normalized,
+            );
+        if (duplicate) {
+          skipped++;
+        } else {
+          _draftMembers.add(
+            (term: entry.value.translatedText, language: entry.key),
+          );
+          added++;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _suggestions = null;
+      _addingTerm = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          skipped == 0
+              ? 'Added $added name(s).'
+              : 'Added $added name(s), skipped $skipped already on your list.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     final String label = _labelController.text.trim();
     if (label.isEmpty) {
@@ -304,15 +464,39 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     }
     setState(() => _saving = true);
 
-    final AllergenGroupActions actions = ref.read(
+    final AllergenGroupActions groupActions = ref.read(
       allergenGroupActionsProvider,
     );
     if (_isEditing) {
-      await actions.rename(id: widget.groupId!, label: label);
-    } else {
-      await actions.create(label: label);
+      await groupActions.rename(id: widget.groupId!, label: label);
+      if (!mounted) return;
+      context.pop();
+      return;
+    }
+
+    final String newGroupId = await groupActions.create(label: label);
+    int skipped = 0;
+    final AllergenTermActions termActions = ref.read(
+      allergenTermActionsProvider,
+    );
+    for (final _DraftMember member in _draftMembers) {
+      final TermSaveResult result = await termActions.add(
+        term: member.term,
+        groupId: newGroupId,
+        isActive: true,
+      );
+      if (result is! TermSaved) skipped++;
     }
     if (!mounted) return;
+    if (skipped > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$skipped name(s) were already on your list and were not added.',
+          ),
+        ),
+      );
+    }
     context.pop();
   }
 
@@ -411,11 +595,22 @@ class _AttachExistingTerm extends ConsumerWidget {
                 ),
               )
               .toList(growable: false),
-          onChanged: (String? termId) {
+          onChanged: (String? termId) async {
             if (termId == null) return;
-            ref
-                .read(allergenTermActionsProvider)
-                .setGroup(id: termId, groupId: groupId);
+            // Read the group's current state before the attach so the
+            // cascade reflects its pre-existing members, not the just-moved
+            // term's own (possibly different) prior state.
+            final List<AllergenGroupWithTerms> all =
+                ref.read(allAllergenGroupsProvider).valueOrNull ?? const [];
+            final bool groupActive = _groupIsActive(all, groupId);
+            final AllergenTermActions actions = ref.read(
+              allergenTermActionsProvider,
+            );
+            await actions.setGroup(id: termId, groupId: groupId);
+            await actions.setActiveForGroup(
+              groupId: groupId,
+              isActive: groupActive,
+            );
           },
         );
       },

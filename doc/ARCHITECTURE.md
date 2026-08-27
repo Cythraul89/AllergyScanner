@@ -431,6 +431,28 @@ with substring matching), and deduplicating matches at the persistence layer
 in `scan_result_screen.dart`'s `bucketMatchesByGroup`, a pure function kept
 separate from the stored data).
 
+A group's `isActive` is not a stored column — it is a derived getter on the
+in-memory `AllergenGroupWithTerms` (`terms.isEmpty || terms.every((t) =>
+t.isActive)`), computed from the per-term flag that already exists
+(REQUIREMENTS R4.1d). The per-term column stays the source of truth the
+matcher already reads; what changes is the *write* path — every place that
+changes group membership or a group's active state
+(`AllergenTermDao.setActiveForGroup`, the group-edit screen's add/attach
+flows) cascades to every member, so the group never actually ends up split.
+Adding a column to `allergen_groups` instead was rejected: it would be a
+second, redundant source of truth that the per-term flag could still drift
+from (e.g. a direct `setActive` call bypassing the cascade), where the
+derived getter cannot drift by construction.
+
+`GroupEditScreen` is one widget for both `/allergies/groups/add` and
+`/allergies/groups/:groupId/edit` (REQUIREMENTS R4.1e): while adding, names
+and translation suggestions are held in local widget state and only reach
+the database on `Save`, alongside the new group row itself. This was chosen
+over eagerly inserting the group as soon as its label is valid, which would
+need a distinct "draft" concept to clean up an abandoned add (a `label`
+column is `NOT NULL`, so an empty placeholder row isn't possible either) —
+local state avoids ever writing a group that might not end up saved.
+
 Separately, the ingredients-marker gate (`IngredientMarkerDetector`,
 REQUIREMENTS §5.7) lives entirely in `TextReviewScreen`, before
 `ScanActions.evaluate` is ever called — never as a branch inside

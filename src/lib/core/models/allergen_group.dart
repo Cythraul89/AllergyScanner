@@ -29,6 +29,12 @@ class AllergenGroupWithTerms extends Equatable {
   final AllergenGroup group;
   final List<AllergenTerm> terms;
 
+  /// A group is a single substance, so its names are toggled together —
+  /// there is no "some members active, some not" state to represent.
+  /// A group with no members yet reads as active (matches a new term's
+  /// default).
+  bool get isActive => terms.isEmpty || terms.every((t) => t.isActive);
+
   @override
   List<Object?> get props => [group, terms];
 }

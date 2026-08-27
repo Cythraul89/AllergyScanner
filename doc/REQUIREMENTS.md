@@ -160,7 +160,19 @@ not a dependency.
   `remoteLookupEnabled` (§6.6) exactly like the Open Food Facts lookup — no
   suggestion is ever inserted automatically, the user always reviews it
   first through the same duplicate/length checks as any other term (R4.1,
-  R4.2).
+  R4.2). All suggestions may also be added in one action rather than one at
+  a time.
+- **R4.1d** A group's member terms are always active/inactive together — a
+  group represents one substance, so activating or deactivating it is a
+  single action that cascades `allergen_terms.isActive` to every member.
+  There is no per-member toggle within a group. A term newly added to or
+  attached to a group adopts the group's current state, not its own prior
+  state or a fresh default. Only ungrouped terms are toggled individually
+  (R7.8).
+- **R4.1e** Creating a group offers the same member-management UI as editing
+  one — names typed or accepted from translation suggestions while creating
+  are held only in the screen, and are written together with the group on
+  Save, so cancelling never leaves an empty or partial group behind.
 
 ### 4.2 `products` — Open Food Facts cache and local overrides
 
@@ -421,7 +433,9 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   active toggle, swipe-to-delete with undo, and a search field. Terms may be
   organised into groups (§4.1a); the screen shows one collapsible section
   per group, then an "Other terms" section for ungrouped terms, unchanged in
-  rendering from today's flat list.
+  rendering from today's flat list. The active toggle appears on the group
+  header for a grouped term (R4.1d) and on the term itself only when it is
+  ungrouped.
 - **R7.9** Deleting a term does not alter past scans (§4.4). Deleting a
   group (R4.1b) does not delete its member terms.
 

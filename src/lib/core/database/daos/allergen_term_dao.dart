@@ -105,6 +105,22 @@ class AllergenTermDao extends DatabaseAccessor<AppDatabase>
     return (delete(allergenTerms)..where((t) => t.id.equals(id))).go();
   }
 
+  /// A group is one substance, so its members are always active/inactive
+  /// together — this cascades one state to every term in [groupId].
+  Future<void> setActiveForGroup({
+    required String groupId,
+    required bool isActive,
+    required DateTime updatedAt,
+  }) {
+    return (update(allergenTerms)..where((t) => t.groupId.equals(groupId)))
+        .write(
+          AllergenTermsCompanion(
+            isActive: Value(isActive),
+            updatedAt: Value(updatedAt),
+          ),
+        );
+  }
+
   Stream<List<AllergenTerm>> watchUngrouped() {
     final query = select(allergenTerms)
       ..where((t) => t.groupId.isNull())

@@ -8,7 +8,7 @@
 > push to `main` without explicit instruction.
 
 > **Current state**: as of 2026-08-27, `flutter create`, `pub get`,
-> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (158
+> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (161
 > tests) all pass on Flutter 3.47.1 stable / Dart 3.13.1, Linux host — see
 > "Platform traps" below for what broke on the first run and the fixes
 > applied. `go_router` 17 and `archive` 4 are exercised by the widget and
@@ -329,8 +329,8 @@ fails:
 | `test/calculators/allergen_matcher_test.dart` | Every rule of REQUIREMENTS §5: the three verdicts, empty term list, offsets into the normalised text, one match per term, context excerpts, the accepted `nut`/`coconut`, Latin-name and E-number limitations, and two grouped synonyms still producing two matches, all as pinned expectations |
 | `test/calculators/ingredient_marker_detector_test.dart` | The four localized markers, case-insensitivity, optional space before the colon, earliest-marker-wins, section boundary, and accepted limitations (dropped colon, colon-as-semicolon, marker split across a line break, unsupported language) as pinned expectations |
 | `test/database/test_database.dart` | In-memory factory plus row builders shared by the DAO tests |
-| `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes, `setGroup`, `watchUngrouped` |
-| `test/database/allergen_group_dao_test.dart` | Insert/find/rename, `watchAllWithTerms` bucketing, deleting a group ungroups (never deletes) its members |
+| `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes, `setGroup`, `watchUngrouped`, `setActiveForGroup` cascading to every member and leaving other terms alone |
+| `test/database/allergen_group_dao_test.dart` | Insert/find/rename, `watchAllWithTerms` bucketing, deleting a group ungroups (never deletes) its members, `AllergenGroupWithTerms.isActive` (empty/all-active/mixed) |
 | `test/database/product_dao_test.dart` | Tag round trip, remote overwrite, manual override winning, staleness |
 | `test/database/scan_dao_test.dart` | Scan + matches in one write, `setNull` on term and product deletion, `cascade` on scan deletion, re-evaluation replacing matches, pruning, filtering, `updateDetails` column-scoping, pruned/deleted rows' photo paths returned |
 | `test/database/settings_dao_test.dart` | Defaults without a row, `ensureDefaults`, column-scoped writes, no password column |

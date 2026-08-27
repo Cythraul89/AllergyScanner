@@ -129,13 +129,13 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
   }
 }
 
-class _GroupSection extends StatelessWidget {
+class _GroupSection extends ConsumerWidget {
   const _GroupSection({required this.group});
 
   final AllergenGroupWithTerms group;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -145,19 +145,38 @@ class _GroupSection extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           subtitle: Text('${group.terms.length} name(s)'),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // A group is one substance — its names are toggled together,
+              // never individually (see AllergenGroupWithTerms.isActive).
+              Switch(
+                value: group.isActive,
+                onChanged: (bool value) => ref
+                    .read(allergenTermActionsProvider)
+                    .setActiveForGroup(groupId: group.group.id, isActive: value),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
           onTap: () => context.go('/allergies/groups/${group.group.id}/edit'),
         ),
-        ...group.terms.map((AllergenTerm term) => _TermTile(term: term)),
+        ...group.terms.map(
+          (AllergenTerm term) => _TermTile(term: term, showActiveSwitch: false),
+        ),
       ],
     );
   }
 }
 
 class _TermTile extends ConsumerWidget {
-  const _TermTile({required this.term});
+  const _TermTile({required this.term, this.showActiveSwitch = true});
 
   final AllergenTerm term;
+
+  /// `false` for a term shown inside a group section — only the group as a
+  /// whole is toggled there.
+  final bool showActiveSwitch;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -179,12 +198,14 @@ class _TermTile extends ConsumerWidget {
         contentPadding: const EdgeInsets.only(left: 32, right: 16),
         title: Text(term.term),
         subtitle: term.note == null ? null : Text(term.note!),
-        trailing: Switch(
-          value: term.isActive,
-          onChanged: (bool value) => ref
-              .read(allergenTermActionsProvider)
-              .setActive(id: term.id, isActive: value),
-        ),
+        trailing: showActiveSwitch
+            ? Switch(
+                value: term.isActive,
+                onChanged: (bool value) => ref
+                    .read(allergenTermActionsProvider)
+                    .setActive(id: term.id, isActive: value),
+              )
+            : null,
         onTap: () => context.go('/allergies/${term.id}/edit'),
       ),
     );

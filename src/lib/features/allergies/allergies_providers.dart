@@ -51,6 +51,7 @@ class AllergenTermActions {
     required String term,
     String? note,
     String? groupId,
+    bool isActive = true,
   }) async {
     final String normalized = TextNormalizer.normalize(term);
     if (!TextNormalizer.isSearchable(normalized)) {
@@ -68,7 +69,7 @@ class AllergenTermActions {
         id: _uuid.v4(),
         term: term.trim(),
         normalizedTerm: normalized,
-        isActive: true,
+        isActive: isActive,
         note: note,
         groupId: groupId,
         createdAt: timestamp,
@@ -107,6 +108,17 @@ class AllergenTermActions {
 
   Future<void> setActive({required String id, required bool isActive}) =>
       _dao.setActive(id: id, isActive: isActive, updatedAt: _now());
+
+  /// Only ungrouped terms are toggled individually — a group's members are
+  /// always toggled together via [setActiveForGroup].
+  Future<void> setActiveForGroup({
+    required String groupId,
+    required bool isActive,
+  }) => _dao.setActiveForGroup(
+    groupId: groupId,
+    isActive: isActive,
+    updatedAt: _now(),
+  );
 
   /// Assigns ([groupId] non-null) or ungroups ([groupId] null) a term.
   Future<void> setGroup({required String id, required String? groupId}) =>
