@@ -184,3 +184,12 @@ update the platform tables in the README, `CLAUDE.md` and
       backup archive
 - [ ] Wording of any user-facing verdict text checked against
       `doc/REQUIREMENTS.md` §5.6 — the app never claims a product is safe
+
+---
+
+## Licence
+
+AllergyScanner is licensed under the GNU General Public License, version 3 or
+(at your option) any later version — see [`LICENSE`](LICENSE). By submitting a
+pull request, you agree that your contribution is provided under the same
+license.
