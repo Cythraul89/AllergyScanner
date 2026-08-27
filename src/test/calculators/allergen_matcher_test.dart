@@ -228,6 +228,37 @@ void main() {
     });
   });
 
+  group('German ASCII-spelling fallback (R5.3a)', () {
+    test('a term with an umlaut also matches its ASCII-substitute spelling', () {
+      final MatchOutcome outcome = AllergenMatcher.match(
+        text: 'zutaten: rapsoel, salz',
+        activeTerms: <AllergenTerm>[term('Rapsöl')],
+      );
+      expect(outcome.verdict, ScanVerdict.hit);
+      expect(outcome.matches.single.matchedText, 'rapsoel');
+    });
+
+    test('the umlaut spelling itself still matches directly, unaffected', () {
+      expect(
+        AllergenMatcher.match(
+          text: 'zutaten: rapsöl, salz',
+          activeTerms: <AllergenTerm>[term('Rapsöl')],
+        ).verdict,
+        ScanVerdict.hit,
+      );
+    });
+
+    test('a term without ä/ö/ü/ß has no fallback and behaves as before', () {
+      expect(
+        AllergenMatcher.match(
+          text: 'salz',
+          activeTerms: <AllergenTerm>[term('Rapsöl')],
+        ).verdict,
+        ScanVerdict.noMatch,
+      );
+    });
+  });
+
   group('contextFor', () {
     test('cuts an excerpt around the match and marks the cut', () {
       // 'hazelnuts' starts too close to the beginning of `ingredients` for a

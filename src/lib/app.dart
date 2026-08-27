@@ -107,14 +107,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
                 builder: (_, _) => const AllergiesScreen(),
                 routes: <RouteBase>[
                   GoRoute(
-                    path: 'add',
-                    builder: (_, _) => const TermEditScreen(),
-                  ),
-                  GoRoute(
                     path: ':termId/edit',
                     builder: (BuildContext context, GoRouterState state) =>
                         TermEditScreen(
-                          termId: state.pathParameters['termId'],
+                          termId: state.pathParameters['termId']!,
                         ),
                   ),
                   GoRoute(

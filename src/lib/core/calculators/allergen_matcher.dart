@@ -1,5 +1,6 @@
 import '../models/allergen_term.dart';
 import '../models/enums.dart';
+import 'spelling_variant.dart';
 import 'text_normalizer.dart';
 
 /// Pure matching: models in, result out. No I/O, no logging, no clock.
@@ -46,16 +47,44 @@ class AllergenMatcher {
 
       // First occurrence only: one entry per term is what the result view
       // shows, and a term repeated in an ingredient list adds no information.
-      final int index = normalizedText.indexOf(needle);
+      int index = normalizedText.indexOf(needle);
+      String matchedNeedle = needle;
+
+      // Falls back to the term's German ASCII-substitute spelling (e.g.
+      // "Rapsöl" also finds "Rapsoel") — TextNormalizer folds ö/ä/ü to the
+      // base letter, not this transliteration, so the two would otherwise
+      // not match as the same term (REQUIREMENTS R5.3a).
+      if (index < 0) {
+        final String? alternativeTerm = SpellingVariant.asciiAlternative(
+          term.term,
+        );
+        if (alternativeTerm != null) {
+          final String alternativeNeedle = TextNormalizer.normalize(
+            alternativeTerm,
+          );
+          if (TextNormalizer.isSearchable(alternativeNeedle)) {
+            final int alternativeIndex = normalizedText.indexOf(
+              alternativeNeedle,
+            );
+            if (alternativeIndex >= 0) {
+              index = alternativeIndex;
+              matchedNeedle = alternativeNeedle;
+            }
+          }
+        }
+      }
       if (index < 0) continue;
 
       matches.add(
         AllergenMatch(
           termId: term.id,
           term: term.term,
-          matchedText: normalizedText.substring(index, index + needle.length),
+          matchedText: normalizedText.substring(
+            index,
+            index + matchedNeedle.length,
+          ),
           startOffset: index,
-          endOffset: index + needle.length,
+          endOffset: index + matchedNeedle.length,
         ),
       );
     }

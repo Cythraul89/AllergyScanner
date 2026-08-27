@@ -8,7 +8,7 @@
 > push to `main` without explicit instruction.
 
 > **Current state**: as of 2026-08-27, `flutter create`, `pub get`,
-> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (161
+> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (168
 > tests) all pass on Flutter 3.47.1 stable / Dart 3.13.1, Linux host — see
 > "Platform traps" below for what broke on the first run and the fixes
 > applied. `go_router` 17 and `archive` 4 are exercised by the widget and
@@ -89,7 +89,8 @@ src/
 │   │   ├── calculators/
 │   │   │   ├── text_normalizer.dart  the ONE normalisation function
 │   │   │   ├── allergen_matcher.dart pure matching + verdict + context excerpt
-│   │   │   └── ingredient_marker_detector.dart  localized "Ingredients:" gate
+│   │   │   ├── ingredient_marker_detector.dart  localized "Ingredients:" gate
+│   │   │   └── spelling_variant.dart German ASCII-spelling match fallback (öäüß)
 │   │   ├── services/                 log, open_food_facts, translation (MyMemory),
 │   │   │                             text_recognition, backup, scan_photo, webdav
 │   │   ├── utils/                    scan_capabilities, formatters, app_version
@@ -326,7 +327,8 @@ fails:
 | File | What it covers |
 |---|---|
 | `test/calculators/text_normalizer_test.dart` | Accents, `ß` → `ss`, ligatures, punctuation and OCR newlines, whitespace collapsing, non-Latin scripts, idempotence, the 3-character floor |
-| `test/calculators/allergen_matcher_test.dart` | Every rule of REQUIREMENTS §5: the three verdicts, empty term list, offsets into the normalised text, one match per term, context excerpts, the accepted `nut`/`coconut`, Latin-name and E-number limitations, and two grouped synonyms still producing two matches, all as pinned expectations |
+| `test/calculators/spelling_variant_test.dart` | ö/ä/ü/ß → oe/ae/ue/ss substitution, every occurrence, `null` when nothing to substitute, other diacritics left untouched |
+| `test/calculators/allergen_matcher_test.dart` | Every rule of REQUIREMENTS §5: the three verdicts, empty term list, offsets into the normalised text, one match per term, context excerpts, the accepted `nut`/`coconut`, Latin-name and E-number limitations, two grouped synonyms still producing two matches, and the German ASCII-spelling fallback (R5.3a) both ways plus its absence when there is nothing to fall back to, all as pinned expectations |
 | `test/calculators/ingredient_marker_detector_test.dart` | The four localized markers, case-insensitivity, optional space before the colon, earliest-marker-wins, section boundary, and accepted limitations (dropped colon, colon-as-semicolon, marker split across a line break, unsupported language) as pinned expectations |
 | `test/database/test_database.dart` | In-memory factory plus row builders shared by the DAO tests |
 | `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes, `setGroup`, `watchUngrouped`, `setActiveForGroup` cascading to every member and leaving other terms alone |

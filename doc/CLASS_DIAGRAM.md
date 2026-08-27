@@ -119,6 +119,19 @@ class TextNormalizer {
 }
 ```
 
+### 2.1a `SpellingVariant` — `core/calculators/spelling_variant.dart`
+
+```dart
+class SpellingVariant {
+  const SpellingVariant._();
+
+  /// ö→oe, ä→ae, ü→ue, ß→ss (case-preserving); null if none apply.
+  /// Used by AllergenMatcher as a search-time fallback (§2.2) —
+  /// TextNormalizer's own folding (ö→o) is unchanged.
+  static String? asciiAlternative(String term);
+}
+```
+
 ### 2.2 `AllergenMatcher` — `core/calculators/allergen_matcher.dart`
 
 ```dart
@@ -128,7 +141,9 @@ class AllergenMatcher {
   static const int contextRadius = 24;
 
   /// Pure: no I/O, no logging, no clock. [text] is raw and normalised here.
-  /// One match per term (its first occurrence), ordered by startOffset.
+  /// One match per term (its first occurrence), ordered by startOffset. If a
+  /// term does not match directly, SpellingVariant's ASCII-substitute
+  /// spelling is tried as a fallback (§2.1a, REQUIREMENTS R5.3a).
   static MatchOutcome match({
     required String text,
     required List<AllergenTerm> activeTerms,
@@ -553,8 +568,7 @@ MaterialApp.router(routerConfig: ref.watch(routerProvider))
         │                  ├── product            extra: barcode
         │                  └── details            name/shop/photo (§5.16)
         ├── branch 1 → /allergies
-        │              ├── /allergies/add
-        │              ├── /allergies/:termId/edit
+        │              ├── /allergies/:termId/edit   existing term only
         │              ├── /allergies/groups/add
         │              └── /allergies/groups/:groupId/edit
         ├── branch 2 → /history

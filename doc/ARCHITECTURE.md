@@ -82,7 +82,8 @@ src/lib/
 │   ├── calculators/
 │   │   ├── text_normalizer.dart    the single normalisation function (§5.1)
 │   │   ├── allergen_matcher.dart   pure matching + verdict + match context
-│   │   └── ingredient_marker_detector.dart  localized "Ingredients:" gate (§5.15)
+│   │   ├── ingredient_marker_detector.dart  localized "Ingredients:" gate (§5.15)
+│   │   └── spelling_variant.dart   German ASCII-spelling match fallback (§5.15)
 │   ├── services/
 │   │   ├── log_service.dart        file logger, everything logs through it
 │   │   ├── open_food_facts_service.dart   Dio client + sealed OffResult
@@ -453,6 +454,30 @@ need a distinct "draft" concept to clean up an abandoned add (a `label`
 column is `NOT NULL`, so an empty placeholder row isn't possible either) —
 local state avoids ever writing a group that might not end up saved.
 
+The Allergies screen's only creation entry point is now *Add a group*
+(REQUIREMENTS R7.9a); the previous standalone "add a term" route
+(`/allergies/add`) and `TermEditScreen`'s add mode are removed, not just
+unlinked — an unreachable route is dead code the same as an unreachable
+function. `TermEditScreen` now only ever edits an existing term
+(`termId` required, not nullable); a term can still end up ungrouped (by
+removing it from a group, or by that group being deleted, R4.1b), it is just
+never *created* that way.
+
+`SpellingVariant.asciiAlternative` (REQUIREMENTS R5.3a) is a second, separate
+calculator rather than a new step in `TextNormalizer`: `AllergenMatcher` tries
+it only as a fallback, at search time, when a term's stored `normalizedTerm`
+does not match directly — it never changes what `normalizedTerm` itself is
+computed as, so the stored column, the uniqueness check and every existing
+term are all unaffected. This was chosen over folding ö/ä/ü to `oe`/`ae`/`ue`
+in `TextNormalizer` directly (which would need a migration recomputing
+`normalizedTerm` for every row and could collide two terms that already
+differ only by this spelling, e.g. a user who already added both "Rapsöl"
+and "Rapsoel" as separate terms) and over surfacing it as a name to add in
+`GroupEditScreen` (which would need a second stored term per substance for
+something the matcher can just try directly). It needs no
+`remoteLookupEnabled` gate — it is a pure local substitution, not a network
+call.
+
 Separately, the ingredients-marker gate (`IngredientMarkerDetector`,
 REQUIREMENTS §5.7) lives entirely in `TextReviewScreen`, before
 `ScanActions.evaluate` is ever called — never as a branch inside
@@ -524,8 +549,9 @@ StatefulShellRoute.indexedStack → AdaptiveShell
 │                                             from either shell branch via an
 │                                             absolute path, same as .../product
 ├── branch 1  /allergies
-│              /allergies/add
-│              /allergies/:termId/edit
+│              /allergies/:termId/edit        existing term only, no `add` —
+│                                             a new term is always a group of
+│                                             one (§5.15)
 │              /allergies/groups/add          allergen group (§5.15)
 │              /allergies/groups/:groupId/edit
 ├── branch 2  /history

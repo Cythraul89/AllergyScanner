@@ -24,8 +24,11 @@ const String kMyMemoryBaseUrl = 'https://api.mymemory.translated.net';
 const List<String> kSupportedAllergenLanguages = <String>[
   'de',
   'en',
+  'es',
   'fr',
   'it',
+  'no',
+  'sv',
 ];
 
 /// Remote product data older than this is stale (REQUIREMENTS R4.5). A row with

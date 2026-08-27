@@ -30,19 +30,10 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My allergy terms'),
-        actions: <Widget>[
-          IconButton(
-            icon: const Icon(Icons.create_new_folder_outlined),
-            tooltip: 'New group',
-            onPressed: () => context.go('/allergies/groups/add'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('My allergy terms')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/allergies/add'),
-        tooltip: 'Add a term',
+        onPressed: () => context.go('/allergies/groups/add'),
+        tooltip: 'Add a group',
         child: const Icon(Icons.add),
       ),
       body: _buildBody(groups, ungrouped),
@@ -74,8 +65,8 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
             'Add the substances you need to avoid. Only the exact words '
             'you list are searched for, so add each spelling you expect '
             'to see on a pack.',
-        actionLabel: 'Add your first term',
-        onAction: () => context.go('/allergies/add'),
+        actionLabel: 'Add your first group',
+        onAction: () => context.go('/allergies/groups/add'),
       );
     }
 

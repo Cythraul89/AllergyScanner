@@ -155,8 +155,8 @@ not a dependency.
 
 - **R4.1b** Deleting a group ungroups its member terms (FK `setNull`); it
   never deletes them.
-- **R4.1c** Adding a member name may be assisted by a DE/EN/FR/IT translation
-  *suggestion* from an online, keyless service (MyMemory), gated on
+- **R4.1c** Adding a member name may be assisted by a DE/EN/ES/FR/IT/NO/SV
+  translation *suggestion* from an online, keyless service (MyMemory), gated on
   `remoteLookupEnabled` (§6.6) exactly like the Open Food Facts lookup — no
   suggestion is ever inserted automatically, the user always reviews it
   first through the same duplicate/length checks as any other term (R4.1,
@@ -173,7 +173,6 @@ not a dependency.
   one — names typed or accepted from translation suggestions while creating
   are held only in the screen, and are written together with the group on
   Save, so cancelling never leaves an empty or partial group behind.
-
 ### 4.2 `products` — Open Food Facts cache and local overrides
 
 | Field | Type | Notes |
@@ -287,6 +286,14 @@ Applied in this order, to the term and to the ingredient text alike:
 
 - **R5.3** A term matches if its normalised form occurs as a substring of the
   normalised text. Case, accents and punctuation are therefore irrelevant.
+- **R5.3a** If a term contains ä/ö/ü/ß and does not match directly, its
+  German ASCII-substitute spelling is tried as a fallback (ö→oe, ä→ae,
+  ü→ue, ß→ss, e.g. a term "Rapsöl" also finds "Rapsoel" in the text) — a
+  common alternative spelling on packaging that §5.2's normalisation does
+  not already make equivalent to the umlaut form (that folds to the base
+  letter, `ö`→`o`, not this transliteration). Still one match per term
+  (R4.3a) — this is a second string tried when searching, not a second
+  stored term.
 - **R5.4** Offsets refer to the normalised text; the UI highlights on the
   normalised text so the highlight cannot drift out of sync.
 
@@ -429,15 +436,21 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 
 ### 7.3 Allergies
 
-- **R7.8** List of terms, active ones first, with an add/edit sheet, an
-  active toggle, swipe-to-delete with undo, and a search field. Terms may be
+- **R7.8** List of terms, active ones first, with an edit sheet, an active
+  toggle, swipe-to-delete with undo, and a search field. Terms may be
   organised into groups (§4.1a); the screen shows one collapsible section
   per group, then an "Other terms" section for ungrouped terms, unchanged in
   rendering from today's flat list. The active toggle appears on the group
   header for a grouped term (R4.1d) and on the term itself only when it is
   ungrouped.
 - **R7.9** Deleting a term does not alter past scans (§4.4). Deleting a
-  group (R4.1b) does not delete its member terms.
+  group (R4.1b) does not delete its member terms — they reappear ungrouped
+  under "Other terms".
+- **R7.9a** A new term is always created as (at least) a group of one, via
+  the group-add screen (R4.1e) — there is no separate flow to add a
+  standalone term. A term still becomes, or stays, ungrouped by removing it
+  from a group (R4.1b) or by deleting the group it was in; the edit sheet
+  (R7.8) is unchanged for an existing term either way.
 
 ### 7.4 History
 

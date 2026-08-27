@@ -482,7 +482,7 @@ flat active/inactive rendering, unchanged.
 
 ```
 ┌────────────────────────────────────────┐
-│ My allergy terms              [📁] [🔍]│
+│ My allergy terms                  [🔍] │
 ├────────────────────────────────────────┤
 │  Hazelnut                     [●] ›    │
 │    hazelnut                            │
@@ -505,19 +505,23 @@ flat active/inactive rendering, unchanged.
 
 The active toggle sits on the group header, not on its members (R4.1d) — a
 group is one substance, so "hazelnut" on and "haselnuss" off at the same time
-is not a state the UI offers. The `[📁]` AppBar action opens *Add a group*;
-tapping a group header opens *Edit group* (below). Search matches a group's
-label, any of its members' text, or an ungrouped term's text.
+is not a state the UI offers. The `( + )` FAB opens *Add a group* — there is
+no separate "add a term" action; a new term is always created as (at least)
+a group of one [R7.9a]. Tapping a group header opens *Edit group* (below);
+tapping a member or an "Other terms" entry opens *Edit term* (below). Search
+matches a group's label, any of its members' text, or an ungrouped term's
+text.
 
-### Add / edit screen
+### Edit term screen
 
-Implemented as a route (`/allergies/add`, `/allergies/:termId/edit`) rather than
-a modal sheet, so the route tree in `doc/CLASS_DIAGRAM.md` is the whole
-navigation story and a deep link can reach it.
+`/allergies/:termId/edit` — an existing term only; there is no `add` route
+[R7.9a]. A term ends up here either as a group's member (tapped from its
+group section) or, after being removed from a group or its group deleted,
+from "Other terms".
 
 ```
 ┌────────────────────────────────────────┐
-│ ← Add a term                           │
+│ ← Edit term                            │
 │  ┌──────────────────────────────────┐  │
 │  │ hazelnut                         │  │
 │  └──────────────────────────────────┘  │
@@ -585,8 +589,9 @@ not a label-only first step [R4.1e].
   member, with a confirmation naming that. *Attach an existing term* only
   appears once the group exists (edit mode) — there is nothing yet to attach
   to while still adding.
-- *Suggest translations* calls MyMemory for the other three of DE/EN/FR/IT,
-  shown as tappable chips that pre-fill the add field, or added all at once
+- *Suggest translations* calls MyMemory for the other six of
+  DE/EN/ES/FR/IT/NO/SV, shown as tappable chips that pre-fill the add field,
+  or added all at once
   with *Add all* — nothing is ever inserted automatically without going
   through the same duplicate/length checks as any other term [R4.1c].
   Hidden/disabled with an explanatory line when *Look up products online* is

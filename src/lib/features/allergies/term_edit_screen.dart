@@ -7,15 +7,18 @@ import '../../core/models/allergen_term.dart';
 import '../../core/providers.dart';
 import 'allergies_providers.dart';
 
-/// Add or edit one allergy term.
+/// Edit one allergy term's text and note.
+///
+/// A new term is always created as (at least) a group of one, via
+/// `GroupEditScreen` — there is no separate "add a standalone term" flow.
+/// This screen is reached only for an existing term, grouped or not.
 ///
 /// The note about exact-word matching is required copy, not decoration: it is
 /// the user-facing form of the accepted matching limitation (REQUIREMENTS §5.4).
 class TermEditScreen extends ConsumerStatefulWidget {
-  const TermEditScreen({this.termId, super.key});
+  const TermEditScreen({required this.termId, super.key});
 
-  /// `null` when adding.
-  final String? termId;
+  final String termId;
 
   @override
   ConsumerState<TermEditScreen> createState() => _TermEditScreenState();
@@ -28,8 +31,6 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _errorMessage;
-
-  bool get _isEditing => widget.termId != null;
 
   @override
   void initState() {
@@ -45,14 +46,9 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
   }
 
   Future<void> _load() async {
-    final String? id = widget.termId;
-    if (id == null) {
-      setState(() => _loading = false);
-      return;
-    }
     final AllergenTerm? term = await ref
         .read(allergenTermDaoProvider)
-        .findById(id);
+        .findById(widget.termId);
     if (!mounted) return;
     setState(() {
       _termController.text = term?.term ?? '';
@@ -67,7 +63,7 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
     final bool longEnough = TextNormalizer.isSearchable(normalized);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit term' : 'Add a term')),
+      appBar: AppBar(title: const Text('Edit term')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -75,7 +71,6 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
               children: <Widget>[
                 TextField(
                   controller: _termController,
-                  autofocus: !_isEditing,
                   decoration: InputDecoration(
                     labelText: 'Term',
                     border: const OutlineInputBorder(),
@@ -143,13 +138,11 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
         ? null
         : _noteController.text.trim();
 
-    final TermSaveResult result = _isEditing
-        ? await actions.edit(
-            id: widget.termId!,
-            term: _termController.text,
-            note: note,
-          )
-        : await actions.add(term: _termController.text, note: note);
+    final TermSaveResult result = await actions.edit(
+      id: widget.termId,
+      term: _termController.text,
+      note: note,
+    );
 
     if (!mounted) return;
 
