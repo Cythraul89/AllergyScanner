@@ -1,0 +1,456 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "AllergyScanner",
+  "@appTitle": {},
+
+  "shellScanLabel": "Scan",
+  "shellAllergiesLabel": "Allergies",
+  "shellHistoryLabel": "History",
+  "shellSettingsLabel": "Settings",
+
+  "commonSystem": "System",
+  "commonCancel": "Cancel",
+  "commonSave": "Save",
+  "commonAdd": "Add",
+  "commonDelete": "Delete",
+  "commonUndo": "Undo",
+  "commonRetry": "Retry",
+
+  "languageEnglish": "English",
+  "languageGerman": "German",
+  "languageFrench": "French",
+  "languageItalian": "Italian",
+  "languageSpanish": "Spanish",
+  "languageDutch": "Dutch",
+  "languageNorwegian": "Norwegian",
+  "languageSwedish": "Swedish",
+
+  "settingsTitle": "Settings",
+  "settingsSectionAppearance": "APPEARANCE",
+  "settingsThemeLabel": "Theme",
+  "settingsThemeLight": "Light",
+  "settingsThemeDark": "Dark",
+  "settingsAppLanguageTitle": "App language",
+  "settingsAppLanguageSubtitle": "Overrides the device language for this app",
+  "settingsSectionScanning": "SCANNING",
+  "settingsIngredientLanguageLabel": "Preferred ingredient language",
+  "settingsIngredientLanguageSubtitle": "Used when a product has several languages",
+  "settingsRemoteLookupTitle": "Look up products online",
+  "settingsRemoteLookupSubtitle": "Off = no network requests at all; only locally stored products are checked",
+  "settingsSectionData": "DATA",
+  "settingsBackupTitle": "Local backup",
+  "settingsBackupSubtitle": "Export or import a ZIP archive",
+  "settingsSyncTitle": "Nextcloud sync",
+  "settingsSyncConfigured": "Configured",
+  "settingsSyncNotSet": "Not set",
+  "settingsSyncLastSync": "Last sync {date}",
+  "@settingsSyncLastSync": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "settingsSectionAbout": "ABOUT",
+  "settingsAboutTitle": "About AllergyScanner",
+  "settingsPrivacyTitle": "Privacy",
+  "settingsLogsTitle": "App logs",
+
+  "disclaimerIntro": "This app matches text against terms you enter. It does not decide whether a product is safe for you to eat.",
+  "disclaimerBulletOffData": "Product data comes from Open Food Facts and is not verified.",
+  "disclaimerBulletRecognition": "Recognised text can be incomplete or wrong.",
+  "disclaimerBulletExactWords": "Only the exact words you list are found — not their synonyms, Latin names or E-numbers.",
+  "disclaimerReadPackaging": "Always read the packaging.",
+  "disclaimerAcknowledge": "I understand",
+
+  "verdictTitleHit": "Contains terms from your list",
+  "verdictTitleNoMatch": "No term from your list found",
+  "verdictTitleUnknown": "Could not be checked",
+  "verdictLabelHit": "Match",
+  "verdictLabelNoMatch": "No match",
+  "verdictLabelUnknown": "Unchecked",
+  "inputModeBarcode": "barcode",
+  "inputModeOcr": "recognised text",
+  "inputModeManualText": "typed text",
+  "inputModeManualBarcode": "typed barcode",
+  "matchCount": "{count, plural, =1{1 match} other{{count} matches}}",
+  "@matchCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "historyFilterTooltip": "Filter",
+  "historyFilterAll": "All",
+  "historyClearTooltip": "Clear history",
+  "historyLoadError": "Could not load the history: {error}",
+  "@historyLoadError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "historyEmptyTitle": "Nothing checked yet",
+  "historyEmptyMessage": "Every check you make is stored here and stays readable offline.",
+  "historyClearDialogTitle": "Clear history?",
+  "historyClearDialogMessage": "This deletes every stored check. Your allergy terms and products are kept.",
+  "historyClearConfirm": "Clear",
+  "historyRetentionNote": "Keeping the last {count} checks",
+  "@historyRetentionNote": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "historyUnnamedScan": "text scan",
+  "historyUngroupedLabel": "Ungrouped",
+
+  "resultTitle": "Result",
+  "resultShareAction": "Share result as text",
+  "resultDeleteAction": "Delete this scan",
+  "resultLoadError": "Could not load this result: {error}",
+  "@resultLoadError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "resultNotFound": "This scan no longer exists.",
+  "resultSafetyReminder": "This is a text match, not a safety assessment. Always read the packaging.",
+  "resultMatchesHeading": "Matches",
+  "resultAlsoMatched": "Also matched: {names}",
+  "@resultAlsoMatched": {
+    "placeholders": {
+      "names": {"type": "String"}
+    }
+  },
+  "resultDeclaredByOff": "Declared by Open Food Facts",
+  "resultMayContain": "May contain",
+  "resultDeclarationsNote": "These declarations are shown for information. They are not matched against your list.",
+  "resultEvaluatedTextTitle": "Evaluated text",
+  "resultNoTextAvailable": "No ingredient text was available.",
+  "resultCorrectProductAction": "Correct product data",
+  "resultEditDetailsAction": "Edit details",
+  "resultNewScanAction": "New scan",
+  "resultNoMatchDetail": "Checked the ingredient text against your active terms.",
+  "resultUnknownProductNotFound": "This barcode is not in Open Food Facts.",
+  "resultUnknownServerUnreachable": "Open Food Facts could not be reached — a retry may help.",
+  "resultUnknownLookupFailed": "The lookup failed.",
+  "resultUnknownRemoteLookupDisabled": "Online lookup is switched off and this product is not stored locally.",
+  "resultUnknownNoIngredientText": "No ingredient text is available for this product.",
+  "resultUnknownGeneric": "There was no ingredient text to check, or your list is empty.",
+  "resultTextScanFallback": "Text scan",
+  "resultCorrectedByYou": "Corrected by you",
+  "resultOffFetchedOn": "Open Food Facts, fetched {date}",
+  "@resultOffFetchedOn": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "resultScanIngredientListAction": "Scan ingredient list",
+  "resultEnterTextManuallyAction": "Enter text manually",
+
+  "scanBarcodeTitle": "Scan barcode",
+  "scanBarcodeSubtitle": "Look up the product",
+  "scanTextSubtitle": "Read the text on the pack",
+  "scanManualTitle": "Enter manually",
+  "scanManualSubtitle": "Barcode or ingredient text",
+  "scanManualOnlyNotice": "Camera scanning is not available on this platform — use \"Enter manually\".",
+  "scanNoTermsTitle": "No terms yet — add one first",
+  "scanNoTermsSubtitle": "Without a term there is nothing to check against.",
+  "scanActiveTermsSummary": "{count, plural, =1{Your list: 1 active term} other{Your list: {count} active terms}}",
+  "@scanActiveTermsSummary": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "scanRecentHeading": "Recent",
+
+  "barcodeTorchTooltip": "Torch",
+  "barcodeLookingUpProduct": "Looking up product…",
+  "barcodePointAtBarcode": "Point at the barcode on the pack",
+
+  "textCaptureRecognising": "Recognising text…",
+  "textCaptureIntro": "Take a photo of the ingredient list.",
+  "textCaptureTipsHeading": "For a good result:",
+  "textCaptureTipFillFrame": "fill the frame with the list",
+  "textCaptureTipHoldParallel": "hold the camera parallel to the pack",
+  "textCaptureTipAvoidGlare": "avoid glare and shadows",
+  "textCaptureTakePhoto": "Take photo",
+  "textCapturePickImage": "Pick an image",
+  "textCaptureFooterNote": "You can correct the recognised text before it is checked. The photo is deleted right after recognition and is never uploaded.",
+
+  "manualBarcodeSegment": "Barcode",
+  "manualIngredientTextSegment": "Ingredient text",
+  "manualBarcodeHelper": "Digits only, 8–14 characters",
+  "manualLookUpAction": "Look up",
+  "manualTextHandoffNote": "Type or paste the ingredient list on the next screen, then check it.",
+  "manualEnterIngredientTextAction": "Enter ingredient text",
+
+  "reviewTitle": "Check ingredient text",
+  "reviewRecognisedHint": "Recognised text — correct it if needed",
+  "reviewNoTextHint": "No text was recognised. Type or paste the ingredient list.",
+  "reviewRescanAction": "Re-scan",
+  "reviewCheckAction": "Check",
+  "reviewNoMarkerWarning": "No ingredients marker found. Add a heading such as \"Ingredients:\" (or \"Zutaten:\", \"Ingrédients:\", \"Ingredienti:\") before the list, then try again — or re-scan for a clearer photo.",
+  "reviewSectionDetectedTitle": "Ingredients section detected",
+  "reviewSectionNoMatch": "No terms from your list found in this section.",
+  "reviewSectionMatchCount": "{count, plural, =1{1 term matched.} other{{count} terms matched.}}",
+  "@reviewSectionMatchCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "reviewPreviewNote": "This is a preview. The full text is checked again when you tap Check.",
+
+  "productBarcodeLabel": "Barcode {barcode}",
+  "@productBarcodeLabel": {
+    "placeholders": {
+      "barcode": {"type": "String"}
+    }
+  },
+  "productNameLabel": "Product name",
+  "productBrandLabel": "Brand",
+  "productQuantityLabel": "Quantity",
+  "productScanInsteadAction": "Scan an ingredient list instead",
+  "productCorrectionNote": "Your corrections are kept on this device and are never overwritten by a later lookup. Nothing is sent to Open Food Facts.",
+
+  "detailsNameLabel": "Name (optional)",
+  "detailsShopLabel": "Shop (optional)",
+  "detailsShopHelper": "Scans at the same shop are grouped together",
+  "detailsRetakePhoto": "Retake photo",
+  "detailsRemovePhoto": "Remove photo",
+
+  "commonSearch": "Search",
+  "allergiesTitle": "My allergy terms",
+  "allergiesAddGroupTooltip": "Add a group",
+  "allergiesEmptyTitle": "No terms yet",
+  "allergiesEmptyMessage": "Add the substances you need to avoid. Only the exact words you list are searched for, so add each spelling you expect to see on a pack.",
+  "allergiesEmptyActionLabel": "Add your first group",
+  "allergiesGroupNameCount": "{count, plural, =1{1 name} other{{count} names}}",
+  "@allergiesGroupNameCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "allergiesCollapseTooltip": "Collapse",
+  "allergiesExpandTooltip": "Expand",
+  "allergiesOtherTermsHeading": "OTHER TERMS",
+  "allergiesDeletedSnackbar": "Deleted \"{term}\"",
+  "@allergiesDeletedSnackbar": {
+    "placeholders": {
+      "term": {"type": "String"}
+    }
+  },
+  "allergiesGroupsLoadError": "Could not load your groups: {error}",
+  "@allergiesGroupsLoadError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "allergiesTermsLoadError": "Could not load your terms: {error}",
+  "@allergiesTermsLoadError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+
+  "termEditTitle": "Edit term",
+  "termFieldLabel": "Term",
+  "termMinLengthHelper": "At least {count} characters",
+  "@termMinLengthHelper": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "termNoteLabel": "Note (optional)",
+  "termExactWordNote": "Only this exact word is searched for. Add \"corylus avellana\" or \"E322\" as separate terms if you need them.",
+  "termTooShortError": "Use at least {count} characters.",
+  "@termTooShortError": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "termDuplicateError": "\"{term}\" is already on your list.",
+  "@termDuplicateError": {
+    "placeholders": {
+      "term": {"type": "String"}
+    }
+  },
+
+  "groupEditTitle": "Edit group",
+  "groupAddTitle": "Add a group",
+  "groupDeleteTooltip": "Delete group",
+  "groupNameLabel": "Group name",
+  "groupNameHelper": "e.g. \"Hazelnut\" — shown as the group header",
+  "groupMembersHeading": "Names in this group",
+  "groupNoNamesYet": "No names yet.",
+  "groupAddNewNameHeading": "Add a new name",
+  "groupNewNameFieldLabel": "Name",
+  "groupSuggestingInProgress": "Suggesting…",
+  "groupSuggestTranslationsAction": "Suggest translations",
+  "groupTranslationsDisabledNote": "Translation suggestions need remote lookup, which is turned off in Settings.",
+  "groupNoSuggestions": "No translation suggestions right now.",
+  "groupAddAllAction": "Add all ({count})",
+  "@groupAddAllAction": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "groupAlreadyAddedError": "Already added.",
+  "groupAddedCount": "{count, plural, =1{Added 1 name.} other{Added {count} names.}}",
+  "@groupAddedCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "groupAddedWithSkipped": "{added, plural, =1{Added 1 name} other{Added {added} names}}, skipped {skipped} already on your list.",
+  "@groupAddedWithSkipped": {
+    "placeholders": {
+      "added": {"type": "int"},
+      "skipped": {"type": "int"}
+    }
+  },
+  "groupNameRequiredError": "Enter a group name.",
+  "groupSaveSkippedNote": "{count, plural, =1{1 name was} other{{count} names were}} already on your list and not added.",
+  "@groupSaveSkippedNote": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "groupDeleteDialogTitle": "Delete group?",
+  "groupDeleteDialogMessage": "The names in this group are kept on your allergy list, just no longer grouped together.",
+  "groupAttachExistingHint": "Attach an existing term",
+  "groupMemberListLoadError": "Could not load: {error}",
+  "@groupMemberListLoadError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+
+  "aboutTitle": "About",
+  "aboutVersionLabel": "Version {version}",
+  "@aboutVersionLabel": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "aboutNotMedicalDeviceHeading": "Not a medical device",
+  "aboutMedicalDisclaimer": "This app matches text against the terms you enter. It does not decide whether a product is safe for you to eat. Product data is crowd-sourced and unverified, recognised text can be wrong, and only the exact words you list are found. Always read the packaging.",
+  "aboutDataSourceHeading": "Data source",
+  "aboutDataSourceText": "Product data comes from Open Food Facts and is licensed by them under the Open Database License (ODbL).",
+  "aboutUserAgentNote": "Requests identify this app as AllergyScanner/{version} ({contact}).",
+  "@aboutUserAgentNote": {
+    "placeholders": {
+      "version": {"type": "String"},
+      "contact": {"type": "String"}
+    }
+  },
+  "aboutLicenceHeading": "Licence",
+  "aboutLicenceText": "AllergyScanner is free software under the GNU General Public License, version 3. It comes with absolutely no warranty.",
+  "aboutOpenSourceLicencesTitle": "Open source licences",
+
+  "privacyNoAccountHeading": "No account, no telemetry",
+  "privacyNoAccountText": "AllergyScanner has no accounts and no login. It contains no analytics, no crash reporting service, no advertising and no tracking identifiers.",
+  "privacyStoredHeading": "Stored on this device",
+  "privacyStoredText": "Your allergy terms, the products you scanned, your scan history (the last 500 checks) and your settings, in a database inside the app's private storage. A diagnostic log file, viewable under Settings → App logs. If you configure sync, the WebDAV password in the platform key store — never in the database, the log or a backup archive.",
+  "privacyLeavesHeading": "What leaves the device",
+  "privacyLeavesText": "•  The barcode digits, sent to Open Food Facts — only for a product that is not already stored locally, and only while \"Look up products online\" is on.\n•  A backup archive, sent to your own Nextcloud/WebDAV server — only if you configured sync.\n•  Anything you explicitly share.\n\nYour allergy terms and your history are never sent to Open Food Facts or to any other third party.",
+  "privacyCameraHeading": "Camera and photos",
+  "privacyCameraText": "Barcode detection and text recognition both run on this device. No image is uploaded. A photo taken for text recognition is written to a temporary file, processed, and deleted immediately afterwards; only the recognised text — which you can edit — is stored, as part of the scan history.",
+  "privacyControlHeading": "Your control",
+  "privacyControlText": "Delete a single check, clear the whole history, delete any term, export everything as a ZIP archive, switch online lookup off entirely, or uninstall the app to remove all of it.",
+
+  "logsReloadTooltip": "Reload",
+  "logsShareTooltip": "Share",
+  "logsEmptyMessage": "The log is empty.",
+
+  "backupTitle": "Local backup",
+  "backupExportHeading": "Export",
+  "backupExportNote": "Writes your allergy terms, products, history and settings into a ZIP archive. Passwords are never included.",
+  "backupExportAction": "Export archive",
+  "backupImportHeading": "Import",
+  "backupImportNote": "Reads an archive back. Rows that cannot be attached — for example a match whose scan is missing — are skipped and counted.",
+  "backupImportAction": "Import archive",
+  "backupExportedTo": "Exported to {path}",
+  "@backupExportedTo": {
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  "backupExportFailed": "Export failed: {cause}",
+  "@backupExportFailed": {
+    "placeholders": {
+      "cause": {"type": "String"}
+    }
+  },
+  "backupImportedWithSkipped": "Imported {count} rows, skipped {skipped}.",
+  "@backupImportedWithSkipped": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "skipped": {"type": "int"}
+    }
+  },
+  "backupImportedCount": "Imported {count} rows.",
+  "@backupImportedCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "backupImportFailed": "Import failed: {cause}",
+  "@backupImportFailed": {
+    "placeholders": {
+      "cause": {"type": "String"}
+    }
+  },
+  "backupProblemUnreadable": "This file is not a readable archive.",
+  "backupProblemMissingData": "The archive does not contain data.json.",
+  "backupProblemContentInvalid": "The archive content is not valid.",
+  "backupProblemSchemaTooNew": "This backup was written by a newer version of the app (schema {archiveVersion}, this app supports {appVersion}).",
+  "@backupProblemSchemaTooNew": {
+    "placeholders": {
+      "archiveVersion": {"type": "int"},
+      "appVersion": {"type": "int"}
+    }
+  },
+  "backupProblemFormatTooNew": "This backup was written by a newer version of the app (archive format {archiveVersion}, this app supports {appVersion}).",
+  "@backupProblemFormatTooNew": {
+    "placeholders": {
+      "archiveVersion": {"type": "int"},
+      "appVersion": {"type": "int"}
+    }
+  },
+
+  "syncIntro": "Uploads and downloads the same ZIP archive as the local backup, to a folder on your own server. Everything works without this.",
+  "syncUrlLabel": "WebDAV folder URL",
+  "syncUsernameLabel": "Username",
+  "syncPasswordLabel": "App password",
+  "syncPasswordHelper": "Stored in the platform key store only",
+  "syncPinnedCertTitle": "Pinned certificate",
+  "syncTestAndSaveAction": "Test and save",
+  "syncUploadNowAction": "Upload now",
+  "syncRestoreAction": "Restore from server",
+  "syncRemoveConnectionAction": "Remove connection",
+  "syncFillFieldsFirst": "Fill in URL, username and password first.",
+  "syncConnectionSaved": "Connection works. Saved.",
+  "syncAuthRejected": "The server rejected these credentials.",
+  "syncServerUnreachable": "The server could not be reached. A retry may help.",
+  "syncUntrustedCertTitle": "Untrusted certificate",
+  "syncUntrustedCertMessage": "The server presented a certificate that your device does not trust. Compare its fingerprint with your server before you accept it.",
+  "syncTrustCertAction": "Trust this certificate",
+  "syncCertPinned": "Certificate pinned. Test and save again.",
+  "syncUploadSuccess": "Backup uploaded.",
+  "syncCertNotTrusted": "The server certificate is not trusted.",
+  "syncStoredCredsRejected": "The server rejected the stored credentials.",
+  "syncRestoredNoDetail": "Restored.",
+  "syncRestoredWithSkipped": "Restored {count} rows, skipped {skipped}.",
+  "@syncRestoredWithSkipped": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "skipped": {"type": "int"}
+    }
+  },
+  "syncRestoredCount": "Restored {count} rows.",
+  "@syncRestoredCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "syncConnectionRemoved": "Connection removed. The stored password was deleted."
+}

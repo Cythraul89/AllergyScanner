@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../models/enums.dart';
 import '../utils/formatters.dart';
 
@@ -56,6 +57,7 @@ class VerdictBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final VerdictStyle style = VerdictStyle.of(context, verdict);
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Container(
       width: double.infinity,
@@ -74,7 +76,7 @@ class VerdictBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  Formatters.verdictTitle(verdict),
+                  Formatters.verdictTitle(l10n, verdict),
                   style: text.titleMedium?.copyWith(
                     color: style.foreground,
                     fontWeight: FontWeight.w600,
@@ -106,7 +108,7 @@ class VerdictBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final VerdictStyle style = VerdictStyle.of(context, verdict);
     return Tooltip(
-      message: Formatters.verdictLabel(verdict),
+      message: Formatters.verdictLabel(AppLocalizations.of(context)!, verdict),
       child: CircleAvatar(
         radius: 16,
         backgroundColor: style.background,

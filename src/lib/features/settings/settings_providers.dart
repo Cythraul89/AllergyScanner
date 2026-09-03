@@ -150,7 +150,10 @@ class BackupActions {
       _log.info('Restored $name: ${result.imported} rows');
       return WebdavSuccess<ImportOutcome>(result);
     } on BackupFormatException catch (exception) {
-      return WebdavFailure(exception.message);
+      return WebdavFailure(
+        'The backup on the server could not be restored '
+        '(${exception.problem.runtimeType}).',
+      );
     }
   }
 }

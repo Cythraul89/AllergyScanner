@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants.dart';
 import '../../core/providers.dart';
 import '../../core/utils/app_version.dart';
+import '../../l10n/app_localizations.dart';
 
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
@@ -16,34 +17,29 @@ class AboutScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppVersion version = ref.watch(appVersionProvider);
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('About')),
+      appBar: AppBar(title: Text(l10n.aboutTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          Text('AllergyScanner', style: theme.textTheme.headlineSmall),
+          Text(l10n.appTitle, style: theme.textTheme.headlineSmall),
           const SizedBox(height: 4),
-          Text('Version ${version.display}'),
+          Text(l10n.aboutVersionLabel(version.display)),
           const SizedBox(height: 24),
 
-          Text('Not a medical device', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          const Text(
-            'This app matches text against the terms you enter. It does not '
-            'decide whether a product is safe for you to eat. Product data is '
-            'crowd-sourced and unverified, recognised text can be wrong, and '
-            'only the exact words you list are found. Always read the '
-            'packaging.',
+          Text(
+            l10n.aboutNotMedicalDeviceHeading,
+            style: theme.textTheme.titleMedium,
           ),
+          const SizedBox(height: 8),
+          Text(l10n.aboutMedicalDisclaimer),
           const SizedBox(height: 24),
 
-          Text('Data source', style: theme.textTheme.titleMedium),
+          Text(l10n.aboutDataSourceHeading, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          const Text(
-            'Product data comes from Open Food Facts and is licensed by them '
-            'under the Open Database License (ODbL).',
-          ),
+          Text(l10n.aboutDataSourceText),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => launchUrl(_openFoodFactsUri),
@@ -51,39 +47,35 @@ class AboutScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Requests identify this app as '
-            'AllergyScanner/${version.version} ($kAppContactEmail).',
+            l10n.aboutUserAgentNote(version.version, kAppContactEmail),
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 24),
 
-          Text('Licence', style: theme.textTheme.titleMedium),
+          Text(l10n.aboutLicenceHeading, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          const Text(
-            'AllergyScanner is free software under the GNU General Public '
-            'License, version 3. It comes with absolutely no warranty.',
-          ),
+          Text(l10n.aboutLicenceText),
           const SizedBox(height: 24),
 
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Privacy'),
+            title: Text(l10n.settingsPrivacyTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/privacy'),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('App logs'),
+            title: Text(l10n.settingsLogsTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/logs'),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Open source licences'),
+            title: Text(l10n.aboutOpenSourceLicencesTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showLicensePage(
               context: context,
-              applicationName: 'AllergyScanner',
+              applicationName: l10n.appTitle,
               applicationVersion: version.display,
             ),
           ),

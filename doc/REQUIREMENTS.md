@@ -245,6 +245,7 @@ not a dependency.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `themeMode` | int (enum) | `system` | |
+| `appLanguage` | text, nullable | `null` (follow system) | R7.15 |
 | `preferredIngredientsLanguage` | text | device locale language | §6.4 |
 | `remoteLookupEnabled` | bool | `true` | `false` = fully offline, no HTTP at all |
 | `disclaimerAcknowledgedAt` | datetime, nullable | `null` | §1.3 |
@@ -469,9 +470,17 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 
 ### 7.5 Settings
 
-- **R7.11** Theme (system/light/dark), preferred ingredient language, remote
-  lookup on/off, local backup (export/import), Nextcloud sync, About
-  (version, licence, privacy, disclaimer), log viewer.
+- **R7.11** Theme (system/light/dark), app language (system/English/German,
+  R7.15), preferred ingredient language, remote lookup on/off, local backup
+  (export/import), Nextcloud sync, About (version, licence, privacy,
+  disclaimer), log viewer.
+- **R7.15** The app's own UI can be switched between English and German
+  independently of the device locale, defaulting to the system language.
+  `null` (the default) means "follow the system" — a real, permanent state,
+  not just an unset value — `'en'`/`'de'` pins it explicitly. Distinct from
+  R7.11's *preferred ingredient language*, which only affects which
+  language Open Food Facts' multi-language ingredient text is read from, not
+  what language the app's own screens are shown in.
 
 ---
 

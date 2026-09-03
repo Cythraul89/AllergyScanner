@@ -8,6 +8,7 @@ import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
 import '../../core/providers.dart';
 import '../../core/services/translation_service.dart';
+import '../../l10n/app_localizations.dart';
 import 'allergen_group_providers.dart';
 import 'allergies_providers.dart';
 
@@ -102,9 +103,12 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: Text(_isEditing ? 'Edit group' : 'Add a group')),
+        appBar: AppBar(
+          title: Text(_isEditing ? l10n.groupEditTitle : l10n.groupAddTitle),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -115,12 +119,12 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit group' : 'Add a group'),
+        title: Text(_isEditing ? l10n.groupEditTitle : l10n.groupAddTitle),
         actions: <Widget>[
           if (_isEditing)
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete group',
+              tooltip: l10n.groupDeleteTooltip,
               onPressed: _confirmDelete,
             ),
         ],
@@ -132,47 +136,54 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
             controller: _labelController,
             autofocus: !_isEditing,
             decoration: InputDecoration(
-              labelText: 'Group name',
+              labelText: l10n.groupNameLabel,
               border: const OutlineInputBorder(),
-              helperText: 'e.g. "Hazelnut" — shown as the group header',
+              helperText: l10n.groupNameHelper,
               errorText: _labelError,
             ),
             onChanged: (_) => setState(() => _labelError = null),
           ),
           const SizedBox(height: 24),
-          Text('Names in this group', style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            l10n.groupMembersHeading,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
-          _isEditing ? _MemberList(groupId: widget.groupId!) : _buildDraftMembers(),
+          _isEditing
+              ? _MemberList(groupId: widget.groupId!)
+              : _buildDraftMembers(l10n),
           if (_isEditing) ...<Widget>[
             const SizedBox(height: 8),
             _AttachExistingTerm(groupId: widget.groupId!),
           ],
           const SizedBox(height: 24),
-          Text('Add a new name', style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            l10n.groupAddNewNameHeading,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
-          _buildAddTermRow(remoteLookupEnabled),
+          _buildAddTermRow(remoteLookupEnabled, l10n),
           if (!remoteLookupEnabled)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Translation suggestions need remote lookup, which is '
-                'turned off in Settings.',
-                style: TextStyle(fontStyle: FontStyle.italic),
+                l10n.groupTranslationsDisabledNote,
+                style: const TextStyle(fontStyle: FontStyle.italic),
               ),
             ),
-          if (_suggestions != null) _buildSuggestions(),
+          if (_suggestions != null) _buildSuggestions(l10n),
           const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: <Widget>[
               TextButton(
                 onPressed: () => context.pop(),
-                child: const Text('Cancel'),
+                child: Text(l10n.commonCancel),
               ),
               const SizedBox(width: 12),
               FilledButton(
                 onPressed: _saving ? null : _save,
-                child: const Text('Save'),
+                child: Text(l10n.commonSave),
               ),
             ],
           ),
@@ -181,9 +192,9 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     );
   }
 
-  Widget _buildDraftMembers() {
+  Widget _buildDraftMembers(AppLocalizations l10n) {
     if (_draftMembers.isEmpty) {
-      return const Text('No names yet.');
+      return Text(l10n.groupNoNamesYet);
     }
     return Wrap(
       spacing: 8,
@@ -199,7 +210,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     );
   }
 
-  Widget _buildAddTermRow(bool remoteLookupEnabled) {
+  Widget _buildAddTermRow(bool remoteLookupEnabled, AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -210,7 +221,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
               child: TextField(
                 controller: _newTermController,
                 decoration: InputDecoration(
-                  labelText: 'Name',
+                  labelText: l10n.groupNewNameFieldLabel,
                   border: const OutlineInputBorder(),
                   errorText: _newTermError,
                 ),
@@ -239,7 +250,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
           children: <Widget>[
             OutlinedButton(
               onPressed: _addingTerm ? null : _addTerm,
-              child: const Text('Add'),
+              child: Text(l10n.commonAdd),
             ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
@@ -247,7 +258,11 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
                   ? _suggestTranslations
                   : null,
               icon: const Icon(Icons.translate),
-              label: Text(_suggesting ? 'Suggesting…' : 'Suggest translations'),
+              label: Text(
+                _suggesting
+                    ? l10n.groupSuggestingInProgress
+                    : l10n.groupSuggestTranslationsAction,
+              ),
             ),
           ],
         ),
@@ -255,7 +270,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     );
   }
 
-  Widget _buildSuggestions() {
+  Widget _buildSuggestions(AppLocalizations l10n) {
     final Map<String, TranslationResult> suggestions = _suggestions!;
     final List<MapEntry<String, TranslationSuccess>> successes = suggestions
         .entries
@@ -266,9 +281,9 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
         )
         .toList(growable: false);
     if (successes.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 12),
-        child: Text('No translation suggestions right now.'),
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(l10n.groupNoSuggestions),
       );
     }
     return Padding(
@@ -297,7 +312,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: _addingTerm ? null : _addAllSuggestions,
-            child: Text('Add all (${successes.length})'),
+            child: Text(l10n.groupAddAllAction(successes.length)),
           ),
         ],
       ),
@@ -307,9 +322,10 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
   Future<void> _addTerm() async {
     final String text = _newTermController.text;
     if (text.trim().isEmpty) return;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     if (!_isEditing) {
-      _addDraft(term: text, language: _newTermLanguage);
+      _addDraft(term: text, language: _newTermLanguage, l10n: l10n);
       return;
     }
 
@@ -331,12 +347,12 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
         });
       case TermTooShort(minimumLength: final int minimum):
         setState(() {
-          _newTermError = 'Use at least $minimum characters.';
+          _newTermError = l10n.termTooShortError(minimum);
           _addingTerm = false;
         });
       case TermDuplicate(existingTerm: final String existing):
         setState(() {
-          _newTermError = '"$existing" is already on your list.';
+          _newTermError = l10n.termDuplicateError(existing);
           _addingTerm = false;
         });
     }
@@ -345,12 +361,17 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
   /// Add-mode only: validates and appends to the local draft list, with no
   /// database write yet — duplicates against *other, already-saved* groups
   /// or terms only surface at Save time (§_save).
-  void _addDraft({required String term, required String language}) {
+  void _addDraft({
+    required String term,
+    required String language,
+    required AppLocalizations l10n,
+  }) {
     final String normalized = TextNormalizer.normalize(term);
     if (!TextNormalizer.isSearchable(normalized)) {
       setState(
-        () => _newTermError =
-            'Use at least ${TextNormalizer.minimumTermLength} characters.',
+        () => _newTermError = l10n.termTooShortError(
+          TextNormalizer.minimumTermLength,
+        ),
       );
       return;
     }
@@ -358,7 +379,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
       (_DraftMember m) => TextNormalizer.normalize(m.term) == normalized,
     );
     if (duplicate) {
-      setState(() => _newTermError = 'Already added.');
+      setState(() => _newTermError = l10n.groupAlreadyAddedError);
       return;
     }
     setState(() {
@@ -441,6 +462,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     }
 
     if (!mounted) return;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     setState(() {
       _suggestions = null;
       _addingTerm = false;
@@ -449,17 +471,18 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
       SnackBar(
         content: Text(
           skipped == 0
-              ? 'Added $added name(s).'
-              : 'Added $added name(s), skipped $skipped already on your list.',
+              ? l10n.groupAddedCount(added)
+              : l10n.groupAddedWithSkipped(added, skipped),
         ),
       ),
     );
   }
 
   Future<void> _save() async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     final String label = _labelController.text.trim();
     if (label.isEmpty) {
-      setState(() => _labelError = 'Enter a group name.');
+      setState(() => _labelError = l10n.groupNameRequiredError);
       return;
     }
     setState(() => _saving = true);
@@ -490,33 +513,27 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     if (!mounted) return;
     if (skipped > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$skipped name(s) were already on your list and were not added.',
-          ),
-        ),
+        SnackBar(content: Text(l10n.groupSaveSkippedNote(skipped))),
       );
     }
     context.pop();
   }
 
   Future<void> _confirmDelete() async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('Delete group?'),
-        content: const Text(
-          'The names in this group are kept on your allergy list, just no '
-          'longer grouped together.',
-        ),
+        title: Text(l10n.groupDeleteDialogTitle),
+        content: Text(l10n.groupDeleteDialogMessage),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -538,9 +555,11 @@ class _MemberList extends ConsumerWidget {
     final AsyncValue<List<AllergenGroupWithTerms>> groups = ref.watch(
       allAllergenGroupsProvider,
     );
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return groups.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (Object error, StackTrace _) => Text('Could not load: $error'),
+      error: (Object error, StackTrace _) =>
+          Text(l10n.groupMemberListLoadError(error.toString())),
       data: (List<AllergenGroupWithTerms> all) {
         final Iterable<AllergenGroupWithTerms> matches = all.where(
           (AllergenGroupWithTerms g) => g.group.id == groupId,
@@ -549,7 +568,7 @@ class _MemberList extends ConsumerWidget {
             ? const []
             : matches.first.terms;
         if (terms.isEmpty) {
-          return const Text('No names yet.');
+          return Text(l10n.groupNoNamesYet);
         }
         return Wrap(
           spacing: 8,
@@ -586,7 +605,7 @@ class _AttachExistingTerm extends ConsumerWidget {
       data: (List<AllergenTerm> terms) {
         if (terms.isEmpty) return const SizedBox.shrink();
         return DropdownButton<String>(
-          hint: const Text('Attach an existing term'),
+          hint: Text(AppLocalizations.of(context)!.groupAttachExistingHint),
           items: terms
               .map(
                 (AllergenTerm term) => DropdownMenuItem<String>(

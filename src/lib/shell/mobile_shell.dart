@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../l10n/app_localizations.dart';
 import 'adaptive_shell.dart';
 
 /// Layout below [kDesktopBreakpoint].
@@ -11,21 +12,23 @@ class MobileShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final List<String> labels = shellDestinationLabels(
+      AppLocalizations.of(context)!,
+    );
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (int index) =>
             goToBranch(navigationShell, index),
-        destinations: kShellDestinations
-            .map(
-              (ShellDestination destination) => NavigationDestination(
-                icon: Icon(destination.icon),
-                selectedIcon: Icon(destination.selectedIcon),
-                label: destination.label,
-              ),
-            )
-            .toList(growable: false),
+        destinations: <NavigationDestination>[
+          for (int i = 0; i < kShellDestinations.length; i++)
+            NavigationDestination(
+              icon: Icon(kShellDestinations[i].icon),
+              selectedIcon: Icon(kShellDestinations[i].selectedIcon),
+              label: labels[i],
+            ),
+        ],
       ),
     );
   }

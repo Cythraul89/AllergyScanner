@@ -60,6 +60,7 @@ void main() {
         buildMatch(id: 'm1', scanId: 's1', allergenTermId: 'term-1'),
       ],
     );
+    await database.settingsDao.setAppLanguage('de');
     await database.settingsDao.setPreferredLanguage('de');
     await database.settingsDao.setWebdav(
       baseUrl: 'https://cloud.example.org/dav/',
@@ -124,6 +125,7 @@ void main() {
     expect(result.matches.single.allergenTermId, 'term-1');
 
     final AppSettings settings = await target.settingsDao.get();
+    expect(settings.appLanguage, 'de');
     expect(settings.preferredIngredientsLanguage, 'de');
     expect(settings.webdavUsername, 'me');
   });

@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
 import '../../core/services/log_service.dart';
+import '../../l10n/app_localizations.dart';
 
 /// The app log, so a user can report a problem without a debugger attached.
 class LogsScreen extends ConsumerStatefulWidget {
@@ -36,23 +37,24 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('App logs'),
+        title: Text(l10n.settingsLogsTitle),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Reload',
+            tooltip: l10n.logsReloadTooltip,
             onPressed: _reload,
           ),
           IconButton(
             icon: const Icon(Icons.share_outlined),
-            tooltip: 'Share',
+            tooltip: l10n.logsShareTooltip,
             onPressed: _content.isEmpty ? null : _share,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
-            tooltip: 'Clear',
+            tooltip: l10n.historyClearConfirm,
             onPressed: _clear,
           ),
         ],
@@ -60,7 +62,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _content.isEmpty
-          ? const Center(child: Text('The log is empty.'))
+          ? Center(child: Text(l10n.logsEmptyMessage))
           : Scrollbar(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(12),

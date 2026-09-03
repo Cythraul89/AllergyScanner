@@ -12,6 +12,12 @@ class SettingsEntries extends Table {
   IntColumn get themeMode =>
       intEnum<ThemeMode>().withDefault(const Constant(0))();
 
+  /// `null` follows the system language; `'en'`/`'de'` overrides it
+  /// (REQUIREMENTS R7.15). Unlike [preferredIngredientsLanguage], there is no
+  /// concrete fallback to fill in — "follow the system" is a real, permanent
+  /// state, not just an unset default.
+  TextColumn get appLanguage => text().nullable()();
+
   TextColumn get preferredIngredientsLanguage =>
       text().withDefault(const Constant('en'))();
 

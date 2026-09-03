@@ -6,6 +6,7 @@ import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
 import '../../core/widgets/empty_view.dart';
 import '../../core/widgets/error_view.dart';
+import '../../l10n/app_localizations.dart';
 import 'allergen_group_providers.dart';
 import 'allergies_providers.dart';
 
@@ -29,26 +30,32 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
       ungroupedAllergenTermsProvider,
     );
 
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('My allergy terms')),
+      appBar: AppBar(title: Text(l10n.allergiesTitle)),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/allergies/groups/add'),
-        tooltip: 'Add a group',
+        tooltip: l10n.allergiesAddGroupTooltip,
         child: const Icon(Icons.add),
       ),
-      body: _buildBody(groups, ungrouped),
+      body: _buildBody(groups, ungrouped, l10n),
     );
   }
 
   Widget _buildBody(
     AsyncValue<List<AllergenGroupWithTerms>> groups,
     AsyncValue<List<AllergenTerm>> ungrouped,
+    AppLocalizations l10n,
   ) {
     if (groups.hasError) {
-      return ErrorView(message: 'Could not load your groups: ${groups.error}');
+      return ErrorView(
+        message: l10n.allergiesGroupsLoadError(groups.error.toString()),
+      );
     }
     if (ungrouped.hasError) {
-      return ErrorView(message: 'Could not load your terms: ${ungrouped.error}');
+      return ErrorView(
+        message: l10n.allergiesTermsLoadError(ungrouped.error.toString()),
+      );
     }
     if (!groups.hasValue || !ungrouped.hasValue) {
       return const Center(child: CircularProgressIndicator());
@@ -60,12 +67,9 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
     if (allGroups.isEmpty && allUngrouped.isEmpty) {
       return EmptyView(
         icon: Icons.list_alt_outlined,
-        title: 'No terms yet',
-        message:
-            'Add the substances you need to avoid. Only the exact words '
-            'you list are searched for, so add each spelling you expect '
-            'to see on a pack.',
-        actionLabel: 'Add your first group',
+        title: l10n.allergiesEmptyTitle,
+        message: l10n.allergiesEmptyMessage,
+        actionLabel: l10n.allergiesEmptyActionLabel,
         onAction: () => context.go('/allergies/groups/add'),
       );
     }
@@ -91,18 +95,18 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              labelText: 'Search',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              labelText: l10n.commonSearch,
+              border: const OutlineInputBorder(),
             ),
             onChanged: (String value) => setState(() => _query = value),
           ),
         ),
         for (final AllergenGroupWithTerms group in visibleGroups)
-          _GroupSection(group: group),
+          _GroupSection(key: ValueKey<String>(group.group.id), group: group),
         if (visibleUngrouped.isNotEmpty) ...<Widget>[
-          const _SectionHeader(label: 'OTHER TERMS'),
+          _SectionHeader(label: l10n.allergiesOtherTermsHeading),
           ...visibleUngrouped.map(
             (AllergenTerm term) => _TermTile(term: term),
           ),
@@ -120,13 +124,22 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
   }
 }
 
-class _GroupSection extends ConsumerWidget {
-  const _GroupSection({required this.group});
+class _GroupSection extends ConsumerStatefulWidget {
+  const _GroupSection({super.key, required this.group});
 
   final AllergenGroupWithTerms group;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_GroupSection> createState() => _GroupSectionState();
+}
+
+class _GroupSectionState extends ConsumerState<_GroupSection> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final AllergenGroupWithTerms group = widget.group;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -135,7 +148,7 @@ class _GroupSection extends ConsumerWidget {
             group.group.label,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          subtitle: Text('${group.terms.length} name(s)'),
+          subtitle: Text(l10n.allergiesGroupNameCount(group.terms.length)),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -147,14 +160,21 @@ class _GroupSection extends ConsumerWidget {
                     .read(allergenTermActionsProvider)
                     .setActiveForGroup(groupId: group.group.id, isActive: value),
               ),
-              const Icon(Icons.chevron_right),
+              IconButton(
+                icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                tooltip: _expanded
+                    ? l10n.allergiesCollapseTooltip
+                    : l10n.allergiesExpandTooltip,
+                onPressed: () => setState(() => _expanded = !_expanded),
+              ),
             ],
           ),
           onTap: () => context.go('/allergies/groups/${group.group.id}/edit'),
         ),
-        ...group.terms.map(
-          (AllergenTerm term) => _TermTile(term: term, showActiveSwitch: false),
-        ),
+        if (_expanded)
+          ...group.terms.map(
+            (AllergenTerm term) => _TermTile(term: term, showActiveSwitch: false),
+          ),
       ],
     );
   }
@@ -204,12 +224,13 @@ class _TermTile extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     await ref.read(allergenTermActionsProvider).delete(term.id);
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Deleted "${term.term}"'),
+        content: Text(l10n.allergiesDeletedSnackbar(term.term)),
         action: SnackBarAction(
-          label: 'Undo',
+          label: l10n.commonUndo,
           onPressed: () => ref.read(allergenTermActionsProvider).restore(term),
         ),
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// Shown where a provider failed. Keeps the message visible instead of an
 /// endless spinner.
 class ErrorView extends StatelessWidget {
@@ -22,7 +24,10 @@ class ErrorView extends StatelessWidget {
             Text(message, textAlign: TextAlign.center),
             if (onRetry != null) ...<Widget>[
               const SizedBox(height: 16),
-              OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+              OutlinedButton(
+                onPressed: onRetry,
+                child: Text(AppLocalizations.of(context)!.commonRetry),
+              ),
             ],
           ],
         ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers.dart';
 import '../features/disclaimer/disclaimer_screen.dart';
+import '../l10n/app_localizations.dart';
 import 'desktop_shell.dart';
 import 'mobile_shell.dart';
 
@@ -15,41 +16,42 @@ const double kDesktopBreakpoint = 600;
 /// Width above which the rail shows its labels.
 const double kExtendedRailBreakpoint = 1200;
 
-/// The four destinations, in branch order.
+/// The four destinations, in branch order. The label is resolved at render
+/// time from [shellDestinationLabels] — a `const` list cannot call
+/// `AppLocalizations.of(context)`.
 const List<ShellDestination> kShellDestinations = <ShellDestination>[
   ShellDestination(
-    label: 'Scan',
     icon: Icons.qr_code_scanner_outlined,
     selectedIcon: Icons.qr_code_scanner,
   ),
   ShellDestination(
-    label: 'Allergies',
     icon: Icons.list_alt_outlined,
     selectedIcon: Icons.list_alt,
   ),
   ShellDestination(
-    label: 'History',
     icon: Icons.history_outlined,
     selectedIcon: Icons.history,
   ),
   ShellDestination(
-    label: 'Settings',
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings,
   ),
 ];
 
 class ShellDestination {
-  const ShellDestination({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-  });
+  const ShellDestination({required this.icon, required this.selectedIcon});
 
-  final String label;
   final IconData icon;
   final IconData selectedIcon;
 }
+
+/// Labels for [kShellDestinations], in the same order.
+List<String> shellDestinationLabels(AppLocalizations l10n) => <String>[
+  l10n.shellScanLabel,
+  l10n.shellAllergiesLabel,
+  l10n.shellHistoryLabel,
+  l10n.shellSettingsLabel,
+];
 
 /// Picks the layout by width, and gates the whole app behind the
 /// not-a-medical-device disclaimer.

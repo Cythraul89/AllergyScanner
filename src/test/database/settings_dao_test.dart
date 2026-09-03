@@ -50,6 +50,7 @@ void main() {
 
   test('writes are column-scoped and do not clobber other fields', () async {
     await database.settingsDao.setThemeMode(ThemeMode.dark);
+    await database.settingsDao.setAppLanguage('de');
     await database.settingsDao.setPreferredLanguage('it');
     await database.settingsDao.setRemoteLookupEnabled(false);
     await database.settingsDao.setWebdav(
@@ -59,10 +60,21 @@ void main() {
 
     final AppSettings settings = await database.settingsDao.get();
     expect(settings.themeMode, ThemeMode.dark);
+    expect(settings.appLanguage, 'de');
     expect(settings.preferredIngredientsLanguage, 'it');
     expect(settings.remoteLookupEnabled, isFalse);
     expect(settings.webdavBaseUrl, 'https://cloud.example.org/dav/');
     expect(settings.isSyncConfigured, isTrue);
+  });
+
+  test('appLanguage defaults to null (follow the system) and can be reverted', () async {
+    expect((await database.settingsDao.get()).appLanguage, isNull);
+
+    await database.settingsDao.setAppLanguage('en');
+    expect((await database.settingsDao.get()).appLanguage, 'en');
+
+    await database.settingsDao.setAppLanguage(null);
+    expect((await database.settingsDao.get()).appLanguage, isNull);
   });
 
   test('acknowledging the disclaimer is persisted', () async {

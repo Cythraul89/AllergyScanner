@@ -44,6 +44,10 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   Future<void> setThemeMode(ThemeMode mode) =>
       _write(SettingsEntriesCompanion(themeMode: Value(mode)));
 
+  /// `null` reverts to following the system language.
+  Future<void> setAppLanguage(String? language) =>
+      _write(SettingsEntriesCompanion(appLanguage: Value(language)));
+
   Future<void> setRemoteLookupEnabled(bool enabled) =>
       _write(SettingsEntriesCompanion(remoteLookupEnabled: Value(enabled)));
 
@@ -88,6 +92,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   static AppSettings _toModel(SettingsRow row) {
     return AppSettings(
       themeMode: row.themeMode,
+      appLanguage: row.appLanguage,
       preferredIngredientsLanguage: row.preferredIngredientsLanguage,
       remoteLookupEnabled: row.remoteLookupEnabled,
       disclaimerAcknowledgedAt: row.disclaimerAcknowledgedAt,

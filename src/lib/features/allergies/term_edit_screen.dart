@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/calculators/text_normalizer.dart';
 import '../../core/models/allergen_term.dart';
 import '../../core/providers.dart';
+import '../../l10n/app_localizations.dart';
 import 'allergies_providers.dart';
 
 /// Edit one allergy term's text and note.
@@ -61,9 +62,10 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
   Widget build(BuildContext context) {
     final String normalized = TextNormalizer.normalize(_termController.text);
     final bool longEnough = TextNormalizer.isSearchable(normalized);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit term')),
+      appBar: AppBar(title: Text(l10n.termEditTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -72,10 +74,11 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
                 TextField(
                   controller: _termController,
                   decoration: InputDecoration(
-                    labelText: 'Term',
+                    labelText: l10n.termFieldLabel,
                     border: const OutlineInputBorder(),
-                    helperText:
-                        'At least ${TextNormalizer.minimumTermLength} characters',
+                    helperText: l10n.termMinLengthHelper(
+                      TextNormalizer.minimumTermLength,
+                    ),
                     errorText: _errorMessage,
                   ),
                   onChanged: (_) => setState(() => _errorMessage = null),
@@ -83,9 +86,9 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _noteController,
-                  decoration: const InputDecoration(
-                    labelText: 'Note (optional)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.termNoteLabel,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -98,9 +101,7 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Only this exact word is searched for. Add '
-                            '"corylus avellana" or "E322" as separate terms if '
-                            'you need them.',
+                            l10n.termExactWordNote,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -114,12 +115,12 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
                   children: <Widget>[
                     TextButton(
                       onPressed: () => context.pop(),
-                      child: const Text('Cancel'),
+                      child: Text(l10n.commonCancel),
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
                       onPressed: longEnough && !_saving ? _save : null,
-                      child: const Text('Save'),
+                      child: Text(l10n.commonSave),
                     ),
                   ],
                 ),
@@ -131,6 +132,7 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
 
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     final AllergenTermActions actions = ref.read(
       allergenTermActionsProvider,
     );
@@ -152,12 +154,12 @@ class _TermEditScreenState extends ConsumerState<TermEditScreen> {
       case TermTooShort(minimumLength: final int minimum):
         setState(() {
           _saving = false;
-          _errorMessage = 'Use at least $minimum characters.';
+          _errorMessage = l10n.termTooShortError(minimum);
         });
       case TermDuplicate(existingTerm: final String existing):
         setState(() {
           _saving = false;
-          _errorMessage = '"$existing" is already on your list.';
+          _errorMessage = l10n.termDuplicateError(existing);
         });
     }
   }

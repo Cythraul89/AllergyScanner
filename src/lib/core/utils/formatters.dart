@@ -1,12 +1,17 @@
 import 'package:intl/intl.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../models/enums.dart';
 
 /// Date and label formatting.
 ///
 /// The verdict wording lives here on purpose: it is the copy that must never
 /// claim a product is safe (REQUIREMENTS §5.6), so it is auditable in one file
-/// instead of being spread across screens.
+/// instead of being spread across screens. Every method that returns
+/// user-facing text takes the caller's [AppLocalizations] rather than
+/// hardcoding English — [dateTime]/[date]/[time]/[dayHeader] need no such
+/// parameter since `intl`'s `DateFormat` already follows `Intl.defaultLocale`,
+/// which `app.dart` keeps in sync with the resolved app locale.
 class Formatters {
   const Formatters._();
 
@@ -28,43 +33,43 @@ class Formatters {
       _fileTimestamp.format(value.toLocal());
 
   /// Headline of the result banner.
-  static String verdictTitle(ScanVerdict verdict) {
+  static String verdictTitle(AppLocalizations l10n, ScanVerdict verdict) {
     switch (verdict) {
       case ScanVerdict.hit:
-        return 'Contains terms from your list';
+        return l10n.verdictTitleHit;
       case ScanVerdict.noMatch:
         // Never "safe", never "free from".
-        return 'No term from your list found';
+        return l10n.verdictTitleNoMatch;
       case ScanVerdict.unknown:
-        return 'Could not be checked';
+        return l10n.verdictTitleUnknown;
     }
   }
 
   /// Short label for a history row.
-  static String verdictLabel(ScanVerdict verdict) {
+  static String verdictLabel(AppLocalizations l10n, ScanVerdict verdict) {
     switch (verdict) {
       case ScanVerdict.hit:
-        return 'Match';
+        return l10n.verdictLabelHit;
       case ScanVerdict.noMatch:
-        return 'No match';
+        return l10n.verdictLabelNoMatch;
       case ScanVerdict.unknown:
-        return 'Unchecked';
+        return l10n.verdictLabelUnknown;
     }
   }
 
-  static String inputModeLabel(ScanInputMode mode) {
+  static String inputModeLabel(AppLocalizations l10n, ScanInputMode mode) {
     switch (mode) {
       case ScanInputMode.barcode:
-        return 'barcode';
+        return l10n.inputModeBarcode;
       case ScanInputMode.ocr:
-        return 'recognised text';
+        return l10n.inputModeOcr;
       case ScanInputMode.manualText:
-        return 'typed text';
+        return l10n.inputModeManualText;
       case ScanInputMode.manualBarcode:
-        return 'typed barcode';
+        return l10n.inputModeManualBarcode;
     }
   }
 
-  static String matchCountLabel(int count) =>
-      count == 1 ? '1 match' : '$count matches';
+  static String matchCountLabel(AppLocalizations l10n, int count) =>
+      l10n.matchCount(count);
 }

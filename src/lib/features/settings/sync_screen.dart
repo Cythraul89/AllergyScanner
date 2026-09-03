@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/webdav_service.dart';
 import '../../core/utils/formatters.dart';
+import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
 
 /// Optional Nextcloud/WebDAV sync of the backup archive.
@@ -61,46 +62,43 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
   Widget build(BuildContext context) {
     final AppSettings settings = ref.watch(currentSettingsProvider);
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Nextcloud sync')),
+      appBar: AppBar(title: Text(l10n.settingsSyncTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
-                const Text(
-                  'Uploads and downloads the same ZIP archive as the local '
-                  'backup, to a folder on your own server. Everything works '
-                  'without this.',
-                ),
+                Text(l10n.syncIntro),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _urlController,
                   keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'WebDAV folder URL',
+                  decoration: InputDecoration(
+                    labelText: l10n.syncUrlLabel,
                     hintText:
                         'https://cloud.example.org/remote.php/dav/files/me/allergy/',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _userController,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.syncUsernameLabel,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'App password',
-                    border: OutlineInputBorder(),
-                    helperText: 'Stored in the platform key store only',
+                  decoration: InputDecoration(
+                    labelText: l10n.syncPasswordLabel,
+                    border: const OutlineInputBorder(),
+                    helperText: l10n.syncPasswordHelper,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -108,7 +106,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.lock_outline),
-                      title: const Text('Pinned certificate'),
+                      title: Text(l10n.syncPinnedCertTitle),
                       subtitle: Text(
                         settings.certificateFingerprint!,
                         style: theme.textTheme.bodySmall,
@@ -121,32 +119,34 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                   runSpacing: 8,
                   children: <Widget>[
                     FilledButton(
-                      onPressed: _busy ? null : _testAndSave,
-                      child: const Text('Test and save'),
+                      onPressed: _busy ? null : () => _testAndSave(l10n),
+                      child: Text(l10n.syncTestAndSaveAction),
                     ),
                     OutlinedButton(
                       onPressed: _busy || !settings.isSyncConfigured
                           ? null
-                          : _upload,
-                      child: const Text('Upload now'),
+                          : () => _upload(l10n),
+                      child: Text(l10n.syncUploadNowAction),
                     ),
                     OutlinedButton(
                       onPressed: _busy || !settings.isSyncConfigured
                           ? null
-                          : _restore,
-                      child: const Text('Restore from server'),
+                          : () => _restore(l10n),
+                      child: Text(l10n.syncRestoreAction),
                     ),
                     if (settings.isSyncConfigured)
                       TextButton(
-                        onPressed: _busy ? null : _clear,
-                        child: const Text('Remove connection'),
+                        onPressed: _busy ? null : () => _clear(l10n),
+                        child: Text(l10n.syncRemoveConnectionAction),
                       ),
                   ],
                 ),
                 if (settings.lastSyncAt != null) ...<Widget>[
                   const SizedBox(height: 16),
                   Text(
-                    'Last sync ${Formatters.dateTime(settings.lastSyncAt!)}',
+                    l10n.settingsSyncLastSync(
+                      Formatters.dateTime(settings.lastSyncAt!),
+                    ),
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -168,12 +168,12 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     );
   }
 
-  Future<void> _testAndSave() async {
+  Future<void> _testAndSave(AppLocalizations l10n) async {
     final String baseUrl = _urlController.text.trim();
     final String username = _userController.text.trim();
     final String password = _passwordController.text;
     if (baseUrl.isEmpty || username.isEmpty || password.isEmpty) {
-      _report('Fill in URL, username and password first.');
+      _report(l10n.syncFillFieldsFirst);
       return;
     }
 
@@ -203,16 +203,19 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
           username: username,
           password: password,
         );
-        _report('Connection works. Saved.');
+        _report(l10n.syncConnectionSaved);
       case WebdavUntrustedCertificate(
         observedFingerprint: final String fingerprint,
       ):
         setState(() => _busy = false);
-        await _offerPinning(fingerprint);
+        await _offerPinning(fingerprint, l10n);
       case WebdavAuthenticationFailed():
-        _report('The server rejected these credentials.');
+        _report(l10n.syncAuthRejected);
       case WebdavTransient():
-        _report('The server could not be reached. A retry may help.');
+        _report(l10n.syncServerUnreachable);
+      // WebdavFailure carries whatever text webdav_service.dart produced,
+      // sometimes a raw exception message — left as-is rather than
+      // half-translated (doc/ARCHITECTURE.md's i18n boundary note).
       case WebdavFailure(message: final String message):
         _report(message);
     }
@@ -220,20 +223,16 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 
   /// A self-signed certificate is accepted only after the user has seen its
   /// fingerprint; a later mismatch then rejects the connection.
-  Future<void> _offerPinning(String fingerprint) async {
+  Future<void> _offerPinning(String fingerprint, AppLocalizations l10n) async {
     final bool? trust = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Untrusted certificate'),
+        title: Text(l10n.syncUntrustedCertTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text(
-              'The server presented a certificate that your device does not '
-              'trust. Compare its fingerprint with your server before you '
-              'accept it.',
-            ),
+            Text(l10n.syncUntrustedCertMessage),
             const SizedBox(height: 12),
             SelectableText(
               fingerprint,
@@ -244,11 +243,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Trust this certificate'),
+            child: Text(l10n.syncTrustCertAction),
           ),
         ],
       ),
@@ -257,11 +256,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     if (trust ?? false) {
       await ref.read(backupActionsProvider).pinCertificate(fingerprint);
       if (!mounted) return;
-      _report('Certificate pinned. Test and save again.');
+      _report(l10n.syncCertPinned);
     }
   }
 
-  Future<void> _upload() async {
+  Future<void> _upload(AppLocalizations l10n) async {
     setState(() {
       _busy = true;
       _status = null;
@@ -269,10 +268,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     final WebdavOutcome outcome = await ref
         .read(backupActionsProvider)
         .uploadNow();
-    _report(_describe(outcome, success: 'Backup uploaded.'));
+    _report(_describe(l10n, outcome, success: l10n.syncUploadSuccess));
   }
 
-  Future<void> _restore() async {
+  Future<void> _restore(AppLocalizations l10n) async {
     setState(() {
       _busy = true;
       _status = null;
@@ -285,33 +284,37 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       final ImportOutcome? result = outcome.value;
       _report(
         result == null
-            ? 'Restored.'
+            ? l10n.syncRestoredNoDetail
             : result.hasSkipped
-            ? 'Restored ${result.imported} rows, skipped ${result.skipped}.'
-            : 'Restored ${result.imported} rows.',
+            ? l10n.syncRestoredWithSkipped(result.imported, result.skipped)
+            : l10n.syncRestoredCount(result.imported),
       );
       return;
     }
-    _report(_describe(outcome, success: 'Restored.'));
+    _report(_describe(l10n, outcome, success: l10n.syncRestoredNoDetail));
   }
 
-  Future<void> _clear() async {
+  Future<void> _clear(AppLocalizations l10n) async {
     await ref.read(backupActionsProvider).clearConnection();
     if (!mounted) return;
     _passwordController.clear();
-    _report('Connection removed. The stored password was deleted.');
+    _report(l10n.syncConnectionRemoved);
   }
 
-  static String _describe(WebdavOutcome outcome, {required String success}) {
+  static String _describe(
+    AppLocalizations l10n,
+    WebdavOutcome outcome, {
+    required String success,
+  }) {
     switch (outcome) {
       case WebdavSuccess():
         return success;
       case WebdavUntrustedCertificate():
-        return 'The server certificate is not trusted.';
+        return l10n.syncCertNotTrusted;
       case WebdavAuthenticationFailed():
-        return 'The server rejected the stored credentials.';
+        return l10n.syncStoredCredsRejected;
       case WebdavTransient():
-        return 'The server could not be reached. A retry may help.';
+        return l10n.syncServerUnreachable;
       case WebdavFailure(message: final String message):
         return message;
     }

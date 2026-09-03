@@ -16,6 +16,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/utils/scan_capabilities.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/verdict_banner.dart';
+import '../../l10n/app_localizations.dart';
 import '../history/history_providers.dart';
 import '../scan/scan_actions.dart';
 import 'result_providers.dart';
@@ -41,36 +42,36 @@ class ScanResultScreen extends ConsumerWidget {
     final AsyncValue<ScanResult?> result = ref.watch(
       scanResultProvider(scanId),
     );
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Result'),
+        title: Text(l10n.resultTitle),
         actions: <Widget>[
           if (result.value != null)
             PopupMenuButton<String>(
               onSelected: (String action) =>
-                  _onMenuAction(context, ref, action, result.value!),
-              itemBuilder: (BuildContext context) =>
-                  const <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'share',
-                      child: Text('Share result as text'),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Text('Delete this scan'),
-                    ),
-                  ],
+                  _onMenuAction(context, ref, action, result.value!, l10n),
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'share',
+                  child: Text(l10n.resultShareAction),
+                ),
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Text(l10n.resultDeleteAction),
+                ),
+              ],
             ),
         ],
       ),
       body: result.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object error, StackTrace _) =>
-            ErrorView(message: 'Could not load this result: $error'),
+            ErrorView(message: l10n.resultLoadError(error.toString())),
         data: (ScanResult? value) {
           if (value == null) {
-            return const ErrorView(message: 'This scan no longer exists.');
+            return ErrorView(message: l10n.resultNotFound);
           }
           return _ResultBody(result: value, lookupProblem: lookupProblem);
         },
@@ -83,11 +84,12 @@ class ScanResultScreen extends ConsumerWidget {
     WidgetRef ref,
     String action,
     ScanResult result,
+    AppLocalizations l10n,
   ) async {
     switch (action) {
       case 'share':
         await SharePlus.instance.share(
-          ShareParams(text: _asShareText(result)),
+          ShareParams(text: _asShareText(result, l10n)),
         );
       case 'delete':
         // Routed through HistoryActions, not the DAO directly, so photo
@@ -98,9 +100,12 @@ class ScanResultScreen extends ConsumerWidget {
     }
   }
 
-  static String _asShareText(ScanResult result) {
+  static String _asShareText(ScanResult result, AppLocalizations l10n) {
     final StringBuffer buffer = StringBuffer()
-      ..writeln('AllergyScanner — ${Formatters.verdictTitle(result.scan.verdict)}')
+      ..writeln(
+        'AllergyScanner — '
+        '${Formatters.verdictTitle(l10n, result.scan.verdict)}',
+      )
       ..writeln(result.scan.productNameSnapshot ?? result.scan.barcode ?? '')
       ..writeln();
     for (final ScanMatch match in result.matches) {
@@ -108,10 +113,7 @@ class ScanResultScreen extends ConsumerWidget {
     }
     buffer
       ..writeln()
-      ..writeln(
-        'This is a text match, not a safety assessment. '
-        'Always read the packaging.',
-      );
+      ..writeln(l10n.resultSafetyReminder);
     return buffer.toString();
   }
 }
@@ -127,6 +129,7 @@ class _ResultBody extends ConsumerWidget {
     final Scan scan = result.scan;
     final Product? product = result.product;
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ScanCapabilities capabilities = ref.watch(scanCapabilitiesProvider);
     final List<AllergenTerm> allTerms =
         ref.watch(allAllergenTermsProvider).value ?? const <AllergenTerm>[];
@@ -142,7 +145,10 @@ class _ResultBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        VerdictBanner(verdict: scan.verdict, detail: _verdictDetail(scan)),
+        VerdictBanner(
+          verdict: scan.verdict,
+          detail: _verdictDetail(l10n, scan),
+        ),
         const SizedBox(height: 16),
 
         if (scan.name != null || scan.shop != null || scan.photoPath != null)
@@ -153,19 +159,19 @@ class _ResultBody extends ConsumerWidget {
 
         if (product != null || scan.productNameSnapshot != null) ...<Widget>[
           Text(
-            _productLine(scan, product),
+            _productLine(l10n, scan, product),
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
           Text(
-            _provenanceLine(scan, product),
+            _provenanceLine(l10n, scan, product),
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
         ],
 
         if (matchBuckets.isNotEmpty) ...<Widget>[
-          Text('Matches', style: theme.textTheme.titleMedium),
+          Text(l10n.resultMatchesHeading, style: theme.textTheme.titleMedium),
           const Divider(),
           ...matchBuckets.map(
             (List<ScanMatch> bucket) => Padding(
@@ -190,8 +196,12 @@ class _ResultBody extends ConsumerWidget {
                   // matcher itself still matches each name independently.
                   if (bucket.length > 1)
                     Text(
-                      'Also matched: '
-                      '${bucket.skip(1).map((ScanMatch m) => m.termSnapshot).join(', ')}',
+                      l10n.resultAlsoMatched(
+                        bucket
+                            .skip(1)
+                            .map((ScanMatch m) => m.termSnapshot)
+                            .join(', '),
+                      ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontStyle: FontStyle.italic,
                       ),
@@ -206,32 +216,31 @@ class _ResultBody extends ConsumerWidget {
         if (product != null) ...<Widget>[
           if (product.allergensTags.isNotEmpty)
             _TagSection(
-              title: 'Declared by Open Food Facts',
+              title: l10n.resultDeclaredByOff,
               tags: product.allergensTags,
             ),
           if (product.tracesTags.isNotEmpty)
-            _TagSection(title: 'May contain', tags: product.tracesTags),
+            _TagSection(title: l10n.resultMayContain, tags: product.tracesTags),
           if (product.allergensTags.isNotEmpty ||
               product.tracesTags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 12),
               child: Text(
-                'These declarations are shown for information. They are not '
-                'matched against your list.',
+                l10n.resultDeclarationsNote,
                 style: theme.textTheme.bodySmall,
               ),
             ),
         ],
 
         ExpansionTile(
-          title: const Text('Evaluated text'),
+          title: Text(l10n.resultEvaluatedTextTitle),
           tilePadding: EdgeInsets.zero,
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: SelectableText(
                 scan.evaluatedText.isEmpty
-                    ? 'No ingredient text was available.'
+                    ? l10n.resultNoTextAvailable
                     : scan.evaluatedText,
                 style: theme.textTheme.bodySmall,
               ),
@@ -240,11 +249,7 @@ class _ResultBody extends ConsumerWidget {
         ),
 
         const SizedBox(height: 8),
-        Text(
-          'This is a text match, not a safety assessment. Always read the '
-          'packaging.',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text(l10n.resultSafetyReminder, style: theme.textTheme.bodySmall),
         const SizedBox(height: 16),
 
         Wrap(
@@ -257,15 +262,15 @@ class _ResultBody extends ConsumerWidget {
                   '/scan/result/${scan.id}/product',
                   extra: scan.barcode,
                 ),
-                child: const Text('Correct product data'),
+                child: Text(l10n.resultCorrectProductAction),
               ),
             OutlinedButton(
               onPressed: () => context.go('/scan/result/${scan.id}/details'),
-              child: const Text('Edit details'),
+              child: Text(l10n.resultEditDetailsAction),
             ),
             OutlinedButton(
               onPressed: () => context.go('/scan'),
-              child: const Text('New scan'),
+              child: Text(l10n.resultNewScanAction),
             ),
           ],
         ),
@@ -273,56 +278,65 @@ class _ResultBody extends ConsumerWidget {
     );
   }
 
-  String? _verdictDetail(Scan scan) {
+  String? _verdictDetail(AppLocalizations l10n, Scan scan) {
     switch (scan.verdict) {
       case ScanVerdict.hit:
-        return Formatters.matchCountLabel(scan.matchCount);
+        return Formatters.matchCountLabel(l10n, scan.matchCount);
       case ScanVerdict.noMatch:
-        return 'Checked the ingredient text against your active terms.';
+        return l10n.resultNoMatchDetail;
       case ScanVerdict.unknown:
-        return _unknownReason();
+        return _unknownReason(l10n);
     }
   }
 
-  String _unknownReason() {
+  String _unknownReason(AppLocalizations l10n) {
     switch (lookupProblem) {
       case ScanLookupProblem.productNotFound:
-        return 'This barcode is not in Open Food Facts.';
+        return l10n.resultUnknownProductNotFound;
       case ScanLookupProblem.serverUnreachable:
-        return 'Open Food Facts could not be reached — a retry may help.';
+        return l10n.resultUnknownServerUnreachable;
       case ScanLookupProblem.lookupFailed:
-        return 'The lookup failed.';
+        return l10n.resultUnknownLookupFailed;
       case ScanLookupProblem.remoteLookupDisabled:
-        return 'Online lookup is switched off and this product is not stored '
-            'locally.';
+        return l10n.resultUnknownRemoteLookupDisabled;
       case ScanLookupProblem.noIngredientText:
-        return 'No ingredient text is available for this product.';
+        return l10n.resultUnknownNoIngredientText;
       case null:
-        return 'There was no ingredient text to check, or your list is empty.';
+        return l10n.resultUnknownGeneric;
     }
   }
 
-  static String _productLine(Scan scan, Product? product) {
+  static String _productLine(
+    AppLocalizations l10n,
+    Scan scan,
+    Product? product,
+  ) {
     final List<String> parts = <String>[
       product?.productName ?? scan.productNameSnapshot ?? '',
       product?.brands ?? '',
       product?.quantity ?? '',
     ].where((String part) => part.isNotEmpty).toList(growable: false);
-    return parts.isEmpty ? (scan.barcode ?? 'Text scan') : parts.join(' · ');
+    return parts.isEmpty
+        ? (scan.barcode ?? l10n.resultTextScanFallback)
+        : parts.join(' · ');
   }
 
-  static String _provenanceLine(Scan scan, Product? product) {
+  static String _provenanceLine(
+    AppLocalizations l10n,
+    Scan scan,
+    Product? product,
+  ) {
     if (product == null) {
-      return Formatters.inputModeLabel(scan.inputMode);
+      return Formatters.inputModeLabel(l10n, scan.inputMode);
     }
     if (product.hasManualOverride) {
-      return 'Corrected by you';
+      return l10n.resultCorrectedByYou;
     }
     final DateTime? fetched = product.fetchedAt;
     if (product.source == ProductSource.openFoodFacts && fetched != null) {
-      return 'Open Food Facts, fetched ${Formatters.date(fetched)}';
+      return l10n.resultOffFetchedOn(Formatters.date(fetched));
     }
-    return Formatters.inputModeLabel(scan.inputMode);
+    return Formatters.inputModeLabel(l10n, scan.inputMode);
   }
 }
 
@@ -389,6 +403,7 @@ class _UnknownActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Wrap(
@@ -398,11 +413,11 @@ class _UnknownActions extends StatelessWidget {
           if (capabilities.canRecognizeText)
             FilledButton(
               onPressed: () => context.go('/scan/text'),
-              child: const Text('Scan ingredient list'),
+              child: Text(l10n.resultScanIngredientListAction),
             ),
           OutlinedButton(
             onPressed: () => context.go('/scan/review', extra: ''),
-            child: const Text('Enter text manually'),
+            child: Text(l10n.resultEnterTextManuallyAction),
           ),
         ],
       ),

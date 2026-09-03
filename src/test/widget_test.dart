@@ -11,6 +11,7 @@ import 'package:allergy_scanner/core/services/text_recognition_service.dart';
 import 'package:allergy_scanner/core/services/translation_service.dart';
 import 'package:allergy_scanner/core/services/webdav_service.dart';
 import 'package:allergy_scanner/core/utils/app_version.dart';
+import 'package:allergy_scanner/core/utils/formatters.dart';
 import 'package:allergy_scanner/core/utils/scan_capabilities.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -149,4 +150,45 @@ void main() {
     expect(find.text('Settings'), findsWidgets);
     await closeAndSettle(tester);
   });
+
+  testWidgets(
+    'setting appLanguage to German renders the shell in German',
+    (WidgetTester tester) async {
+      await database.settingsDao.acknowledgeDisclaimer(testTimestamp);
+      await database.settingsDao.setAppLanguage('de');
+      await pumpApp(tester);
+
+      expect(find.text('Scannen'), findsWidgets);
+      expect(find.text('Allergien'), findsWidgets);
+      expect(find.text('Verlauf'), findsWidgets);
+      expect(find.text('Einstellungen'), findsWidgets);
+      // The English strings must not also be present — a stuck locale
+      // resolution would otherwise pass by accident.
+      expect(find.text('Scan'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
+      // app.dart's MaterialApp.builder keeps Intl.defaultLocale in sync with
+      // the resolved locale, so German date symbols must already be loaded
+      // (via GlobalMaterialLocalizations' delegate) — this throws
+      // LocaleDataException if they are not.
+      expect(
+        () => Formatters.dateTime(DateTime.utc(2026, 1, 2, 3, 4)),
+        returnsNormally,
+      );
+      await closeAndSettle(tester);
+    },
+  );
+
+  testWidgets(
+    'appLanguage left as null (system) keeps the default English locale',
+    (WidgetTester tester) async {
+      await database.settingsDao.acknowledgeDisclaimer(testTimestamp);
+      await pumpApp(tester);
+
+      // The Flutter test harness's platform locale defaults to en_US, so an
+      // unset appLanguage must resolve to English, not fall back to German.
+      expect(find.text('Scan'), findsWidgets);
+      expect(find.text('Scannen'), findsNothing);
+      await closeAndSettle(tester);
+    },
+  );
 }

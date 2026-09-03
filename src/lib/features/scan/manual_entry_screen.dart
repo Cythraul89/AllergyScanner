@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/scan_input.dart';
 import '../../core/providers.dart';
 import '../../core/utils/scan_capabilities.dart';
+import '../../l10n/app_localizations.dart';
 import 'scan_actions.dart';
 import 'scan_providers.dart';
 
@@ -39,21 +40,22 @@ class _ManualEntryScreenState extends ConsumerState<ManualEntryScreen> {
     final _ManualMode mode =
         _mode ??
         (capabilities.canScanBarcode ? _ManualMode.barcode : _ManualMode.text);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Enter manually')),
+      appBar: AppBar(title: Text(l10n.scanManualTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
           SegmentedButton<_ManualMode>(
-            segments: const <ButtonSegment<_ManualMode>>[
+            segments: <ButtonSegment<_ManualMode>>[
               ButtonSegment<_ManualMode>(
                 value: _ManualMode.barcode,
-                label: Text('Barcode'),
+                label: Text(l10n.manualBarcodeSegment),
               ),
               ButtonSegment<_ManualMode>(
                 value: _ManualMode.text,
-                label: Text('Ingredient text'),
+                label: Text(l10n.manualIngredientTextSegment),
               ),
             ],
             selected: <_ManualMode>{mode},
@@ -62,15 +64,15 @@ class _ManualEntryScreenState extends ConsumerState<ManualEntryScreen> {
           ),
           const SizedBox(height: 24),
           if (mode == _ManualMode.barcode)
-            ..._barcodeFields()
+            ..._barcodeFields(l10n)
           else
-            ..._textHandoff(),
+            ..._textHandoff(l10n),
         ],
       ),
     );
   }
 
-  List<Widget> _barcodeFields() {
+  List<Widget> _barcodeFields(AppLocalizations l10n) {
     final String digits = _barcodeController.text.trim();
     final bool valid = digits.length >= 8 && digits.length <= 14;
 
@@ -82,12 +84,12 @@ class _ManualEntryScreenState extends ConsumerState<ManualEntryScreen> {
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(14),
         ],
-        decoration: const InputDecoration(
-          labelText: 'Barcode',
-          border: OutlineInputBorder(),
+        decoration: InputDecoration(
+          labelText: l10n.manualBarcodeSegment,
+          border: const OutlineInputBorder(),
           // The checksum is deliberately not validated: a user reading digits
           // off a damaged label should not be blocked by it.
-          helperText: 'Digits only, 8–14 characters',
+          helperText: l10n.manualBarcodeHelper,
         ),
         onChanged: (_) => setState(() {}),
       ),
@@ -100,22 +102,20 @@ class _ManualEntryScreenState extends ConsumerState<ManualEntryScreen> {
                 width: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Text('Look up'),
+            : Text(l10n.manualLookUpAction),
       ),
     ];
   }
 
-  List<Widget> _textHandoff() {
+  List<Widget> _textHandoff(AppLocalizations l10n) {
     return <Widget>[
-      const Text(
-        'Type or paste the ingredient list on the next screen, then check it.',
-      ),
+      Text(l10n.manualTextHandoffNote),
       const SizedBox(height: 24),
       FilledButton(
         // Reuses the review screen, so typed and recognised text take exactly
         // the same path into the pipeline.
         onPressed: () => context.go('/scan/review', extra: ''),
-        child: const Text('Enter ingredient text'),
+        child: Text(l10n.manualEnterIngredientTextAction),
       ),
     ];
   }

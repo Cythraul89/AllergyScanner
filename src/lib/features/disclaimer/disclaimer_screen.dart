@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Shown once, before anything else, and reachable again from About.
 ///
@@ -14,6 +15,7 @@ class DisclaimerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       body: SafeArea(
@@ -31,28 +33,19 @@ class DisclaimerScreen extends ConsumerWidget {
                     color: theme.colorScheme.error,
                   ),
                   const SizedBox(height: 16),
-                  Text('AllergyScanner', style: theme.textTheme.headlineSmall),
+                  Text(l10n.appTitle, style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 16),
                   Text(
-                    'This app matches text against terms you enter. It does '
-                    'not decide whether a product is safe for you to eat.',
+                    l10n.disclaimerIntro,
                     style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 16),
-                  const _Bullet(
-                    'Product data comes from Open Food Facts and is not '
-                    'verified.',
-                  ),
-                  const _Bullet(
-                    'Recognised text can be incomplete or wrong.',
-                  ),
-                  const _Bullet(
-                    'Only the exact words you list are found — not their '
-                    'synonyms, Latin names or E-numbers.',
-                  ),
+                  _Bullet(l10n.disclaimerBulletOffData),
+                  _Bullet(l10n.disclaimerBulletRecognition),
+                  _Bullet(l10n.disclaimerBulletExactWords),
                   const SizedBox(height: 16),
                   Text(
-                    'Always read the packaging.',
+                    l10n.disclaimerReadPackaging,
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 32),
@@ -60,7 +53,7 @@ class DisclaimerScreen extends ConsumerWidget {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => _acknowledge(ref),
-                      child: const Text('I understand'),
+                      child: Text(l10n.disclaimerAcknowledge),
                     ),
                   ),
                 ],

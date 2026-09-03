@@ -26,7 +26,7 @@ void main() {
       final List<Object> rows = withShopGroups(<Scan>[
         scan(id: 's1', scannedAt: t2, shop: 'Migros'),
         scan(id: 's2', scannedAt: t1, shop: 'Lidl'),
-      ]);
+      ], ungroupedLabel: 'Ungrouped');
       // Migros scanned more recently, so its header comes first.
       final int migrosHeaderIndex = rows.indexWhere(
         (Object r) => r is ShopHeader && r.label == 'Migros',
@@ -44,7 +44,7 @@ void main() {
       final List<Object> rows = withShopGroups(<Scan>[
         scan(id: 's1', scannedAt: t),
         scan(id: 's2', scannedAt: t, shop: '   '),
-      ]);
+      ], ungroupedLabel: 'Ungrouped');
       final Iterable<Scan> scans = rows.whereType<Scan>();
       expect(scans.map((Scan s) => s.id), <String>['s1', 's2']);
       expect(
@@ -59,7 +59,7 @@ void main() {
       final List<Object> rows = withShopGroups(<Scan>[
         scan(id: 's1', scannedAt: day2, shop: 'Migros'),
         scan(id: 's2', scannedAt: day1, shop: 'Migros'),
-      ]);
+      ], ungroupedLabel: 'Ungrouped');
       // 1 shop header + 2 day headers + 2 scans.
       expect(rows, hasLength(5));
       expect(rows.whereType<Scan>(), hasLength(2));

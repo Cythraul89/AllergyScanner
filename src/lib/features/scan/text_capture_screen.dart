@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/providers.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Takes a photo of an ingredient list and recognises it on the device.
 ///
@@ -25,17 +26,18 @@ class _TextCaptureScreenState extends ConsumerState<TextCaptureScreen> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan ingredient list')),
+      appBar: AppBar(title: Text(l10n.resultScanIngredientListAction)),
       body: _busy
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Recognising text…'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(l10n.textCaptureRecognising),
                 ],
               ),
             )
@@ -43,32 +45,30 @@ class _TextCaptureScreenState extends ConsumerState<TextCaptureScreen> {
               padding: const EdgeInsets.all(24),
               children: <Widget>[
                 Text(
-                  'Take a photo of the ingredient list.',
+                  l10n.textCaptureIntro,
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 16),
-                const Text('For a good result:'),
+                Text(l10n.textCaptureTipsHeading),
                 const SizedBox(height: 8),
-                const Text('•  fill the frame with the list'),
-                const Text('•  hold the camera parallel to the pack'),
-                const Text('•  avoid glare and shadows'),
+                Text('•  ${l10n.textCaptureTipFillFrame}'),
+                Text('•  ${l10n.textCaptureTipHoldParallel}'),
+                Text('•  ${l10n.textCaptureTipAvoidGlare}'),
                 const SizedBox(height: 32),
                 FilledButton.icon(
                   onPressed: () => _capture(ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Take photo'),
+                  label: Text(l10n.textCaptureTakePhoto),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () => _capture(ImageSource.gallery),
                   icon: const Icon(Icons.image_outlined),
-                  label: const Text('Pick an image'),
+                  label: Text(l10n.textCapturePickImage),
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'You can correct the recognised text before it is checked. '
-                  'The photo is deleted right after recognition and is never '
-                  'uploaded.',
+                  l10n.textCaptureFooterNote,
                   style: theme.textTheme.bodySmall,
                 ),
               ],

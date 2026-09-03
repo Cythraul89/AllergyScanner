@@ -51,6 +51,9 @@ run; see "Getting started".
   platform key store.
 - Everything works with no network at all — online lookup can be switched off
   entirely.
+- The app's own UI can be switched between English and German in Settings,
+  independent of the ingredient-language preference above; it follows the
+  device language by default.
 
 Not included: accounts, telemetry, notifications, nutrition or diet
 evaluation, AI interpretation of ingredient lists, and writing back to Open
@@ -90,6 +93,7 @@ and macOS; `google_mlkit_text_recognition` 0.17.1 supports Android and iOS only.
 | Concern | Library |
 |---|---|
 | UI | Flutter, Material 3 (indigo seed, system dark mode) |
+| Localization | `flutter_localizations` + `intl`, English/German (`flutter gen-l10n`) |
 | State | `flutter_riverpod` (manual providers) |
 | Navigation | `go_router` (`StatefulShellRoute.indexedStack`) |
 | Database | `drift` + `drift_flutter` + `path_provider` |

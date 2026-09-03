@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/backup_service.dart';
+import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
 
 /// Local ZIP export and import — the fallback that always exists, with or
@@ -23,37 +24,32 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Local backup')),
+      appBar: AppBar(title: Text(l10n.backupTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          Text('Export', style: theme.textTheme.titleMedium),
+          Text(l10n.backupExportHeading, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          const Text(
-            'Writes your allergy terms, products, history and settings into a '
-            'ZIP archive. Passwords are never included.',
-          ),
+          Text(l10n.backupExportNote),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _busy ? null : _export,
+            onPressed: _busy ? null : () => _export(l10n),
             icon: const Icon(Icons.upload_file_outlined),
-            label: const Text('Export archive'),
+            label: Text(l10n.backupExportAction),
           ),
           const SizedBox(height: 32),
 
-          Text('Import', style: theme.textTheme.titleMedium),
+          Text(l10n.backupImportHeading, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          const Text(
-            'Reads an archive back. Rows that cannot be attached — for example '
-            'a match whose scan is missing — are skipped and counted.',
-          ),
+          Text(l10n.backupImportNote),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: _busy ? null : _import,
+            onPressed: _busy ? null : () => _import(l10n),
             icon: const Icon(Icons.download_outlined),
-            label: const Text('Import archive'),
+            label: Text(l10n.backupImportAction),
           ),
 
           if (_busy) ...<Widget>[
@@ -74,7 +70,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     );
   }
 
-  Future<void> _export() async {
+  Future<void> _export(AppLocalizations l10n) async {
     setState(() {
       _busy = true;
       _status = null;
@@ -82,13 +78,13 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
     try {
       final File archive = await ref.read(backupActionsProvider).exportArchive();
-      _report('Exported to ${archive.path}');
+      _report(l10n.backupExportedTo(archive.path));
     } on Object catch (cause) {
-      _report('Export failed: $cause');
+      _report(l10n.backupExportFailed(cause.toString()));
     }
   }
 
-  Future<void> _import() async {
+  Future<void> _import(AppLocalizations l10n) async {
     final PlatformFile? picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: <String>['zip'],
@@ -108,13 +104,37 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       // A skip count above zero must be surfaced, not swallowed (R8.2).
       _report(
         outcome.hasSkipped
-            ? 'Imported ${outcome.imported} rows, skipped ${outcome.skipped}.'
-            : 'Imported ${outcome.imported} rows.',
+            ? l10n.backupImportedWithSkipped(outcome.imported, outcome.skipped)
+            : l10n.backupImportedCount(outcome.imported),
       );
     } on BackupFormatException catch (exception) {
-      _report(exception.message);
+      _report(_describeProblem(l10n, exception.problem));
     } on Object catch (cause) {
-      _report('Import failed: $cause');
+      _report(l10n.backupImportFailed(cause.toString()));
+    }
+  }
+
+  static String _describeProblem(
+    AppLocalizations l10n,
+    BackupFormatProblem problem,
+  ) {
+    switch (problem) {
+      case ArchiveUnreadable():
+        return l10n.backupProblemUnreadable;
+      case ArchiveMissingData():
+        return l10n.backupProblemMissingData;
+      case ArchiveContentInvalid():
+        return l10n.backupProblemContentInvalid;
+      case ArchiveSchemaTooNew(
+        archiveSchemaVersion: final int archive,
+        appSchemaVersion: final int app,
+      ):
+        return l10n.backupProblemSchemaTooNew(archive, app);
+      case ArchiveFormatTooNew(
+        archiveFormatVersion: final int archive,
+        appFormatVersion: final int app,
+      ):
+        return l10n.backupProblemFormatTooNew(archive, app);
     }
   }
 

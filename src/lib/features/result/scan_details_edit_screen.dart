@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/models/scan.dart';
 import '../../core/providers.dart';
+import '../../l10n/app_localizations.dart';
 import 'result_providers.dart';
 
 /// Attaching a name, a shop and a photo to a scan after the fact.
@@ -65,13 +66,14 @@ class _ScanDetailsEditScreenState
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit details'),
+        title: Text(l10n.resultEditDetailsAction),
         actions: <Widget>[
           TextButton(
             onPressed: _loading || _saving ? null : _save,
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ],
       ),
@@ -82,35 +84,35 @@ class _ScanDetailsEditScreenState
               children: <Widget>[
                 TextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Name (optional)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.detailsNameLabel,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _shopController,
-                  decoration: const InputDecoration(
-                    labelText: 'Shop (optional)',
-                    border: OutlineInputBorder(),
-                    helperText: 'Scans at the same shop are grouped together',
+                  decoration: InputDecoration(
+                    labelText: l10n.detailsShopLabel,
+                    border: const OutlineInputBorder(),
+                    helperText: l10n.detailsShopHelper,
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildPhotoSection(),
+                _buildPhotoSection(l10n),
               ],
             ),
     );
   }
 
-  Widget _buildPhotoSection() {
+  Widget _buildPhotoSection(AppLocalizations l10n) {
     if (_newPhotoSourcePath != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Image.file(File(_newPhotoSourcePath!), height: 160, fit: BoxFit.cover),
           const SizedBox(height: 8),
-          _photoActionButtons(hasPhoto: true),
+          _photoActionButtons(l10n, hasPhoto: true),
         ],
       );
     }
@@ -127,14 +129,14 @@ class _ScanDetailsEditScreenState
             },
           ),
           const SizedBox(height: 8),
-          _photoActionButtons(hasPhoto: true),
+          _photoActionButtons(l10n, hasPhoto: true),
         ],
       );
     }
-    return _photoActionButtons(hasPhoto: false);
+    return _photoActionButtons(l10n, hasPhoto: false);
   }
 
-  Widget _photoActionButtons({required bool hasPhoto}) {
+  Widget _photoActionButtons(AppLocalizations l10n, {required bool hasPhoto}) {
     return Wrap(
       spacing: 12,
       runSpacing: 8,
@@ -142,12 +144,14 @@ class _ScanDetailsEditScreenState
         OutlinedButton.icon(
           onPressed: () => _pickPhoto(ImageSource.camera),
           icon: const Icon(Icons.photo_camera_outlined),
-          label: Text(hasPhoto ? 'Retake photo' : 'Take photo'),
+          label: Text(
+            hasPhoto ? l10n.detailsRetakePhoto : l10n.textCaptureTakePhoto,
+          ),
         ),
         OutlinedButton.icon(
           onPressed: () => _pickPhoto(ImageSource.gallery),
           icon: const Icon(Icons.image_outlined),
-          label: const Text('Pick an image'),
+          label: Text(l10n.textCapturePickImage),
         ),
         if (hasPhoto)
           TextButton.icon(
@@ -156,7 +160,7 @@ class _ScanDetailsEditScreenState
               _removePhoto = true;
             }),
             icon: const Icon(Icons.delete_outline),
-            label: const Text('Remove photo'),
+            label: Text(l10n.detailsRemovePhoto),
           ),
       ],
     );

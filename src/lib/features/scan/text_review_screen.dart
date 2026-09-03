@@ -10,6 +10,7 @@ import '../../core/models/scan_input.dart';
 import '../../core/providers.dart';
 import '../../core/utils/scan_capabilities.dart';
 import '../../core/widgets/highlighted_text.dart';
+import '../../l10n/app_localizations.dart';
 import 'scan_actions.dart';
 import 'scan_providers.dart';
 
@@ -52,16 +53,15 @@ class _TextReviewScreenState extends ConsumerState<TextReviewScreen> {
     final MarkerDetectionResult marker = IngredientMarkerDetector.detect(
       _controller.text,
     );
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Check ingredient text')),
+      appBar: AppBar(title: Text(l10n.reviewTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
           Text(
-            wasRecognised
-                ? 'Recognised text — correct it if needed'
-                : 'No text was recognised. Type or paste the ingredient list.',
+            wasRecognised ? l10n.reviewRecognisedHint : l10n.reviewNoTextHint,
           ),
           const SizedBox(height: 8),
           TextField(
@@ -78,7 +78,7 @@ class _TextReviewScreenState extends ConsumerState<TextReviewScreen> {
             OutlinedButton.icon(
               onPressed: () => context.go('/scan/text'),
               icon: const Icon(Icons.document_scanner_outlined),
-              label: const Text('Re-scan'),
+              label: Text(l10n.reviewRescanAction),
             ),
           const SizedBox(height: 16),
           switch (marker) {
@@ -97,7 +97,7 @@ class _TextReviewScreenState extends ConsumerState<TextReviewScreen> {
                     width: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Check'),
+                : Text(l10n.reviewCheckAction),
           ),
         ],
       ),
@@ -145,10 +145,7 @@ class _NoMarkerWarning extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'No ingredients marker found. Add a heading such as '
-                '"Ingredients:" (or "Zutaten:", "Ingrédients:", '
-                '"Ingredienti:") before the list, then try again — or '
-                're-scan for a clearer photo.',
+                AppLocalizations.of(context)!.reviewNoMarkerWarning,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -175,6 +172,7 @@ class _DetectedSectionPreview extends StatelessWidget {
       activeTerms: activeTerms,
     );
     final ThemeData theme = Theme.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Card(
       child: Padding(
@@ -182,12 +180,15 @@ class _DetectedSectionPreview extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Ingredients section detected', style: theme.textTheme.titleSmall),
+            Text(
+              l10n.reviewSectionDetectedTitle,
+              style: theme.textTheme.titleSmall,
+            ),
             const SizedBox(height: 4),
             Text(
               outcome.matches.isEmpty
-                  ? 'No terms from your list found in this section.'
-                  : '${outcome.matches.length} term(s) matched.',
+                  ? l10n.reviewSectionNoMatch
+                  : l10n.reviewSectionMatchCount(outcome.matches.length),
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -206,8 +207,7 @@ class _DetectedSectionPreview extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'This is a preview. The full text is checked again when you '
-              'tap Check.',
+              l10n.reviewPreviewNote,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontStyle: FontStyle.italic,
               ),

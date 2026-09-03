@@ -16,10 +16,15 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 /// project's actual migration code, not a hand-simulation of it. Column
 /// naming/types (snake_case, DateTime as unix-epoch-seconds INTEGER, bool as
 /// 0/1 INTEGER) were confirmed empirically against this project's real
-/// Drift/sqlite3 versions, not assumed. Deliberately narrow: only the two
-/// tables this migration touches are recreated at their v1 shape; `barcode`
-/// is a plain nullable column here (no FK to a `products` table), since
-/// testing that FK is not this migration's concern.
+/// Drift/sqlite3 versions, not assumed. Deliberately narrow: only the tables
+/// touched by a migration between v1 and the current `schemaVersion` are
+/// recreated at their pre-migration shape (settings_entries is included here
+/// purely so the v1<3 `appLanguage` step below has a table to alter — a v1
+/// install always had it, the seed just wouldn't otherwise, since there is
+/// only one live `AppDatabase.schemaVersion` and `onUpgrade` runs every
+/// `if (from < N)` block in one hop); `barcode` is a plain nullable column
+/// here (no FK to a `products` table), since testing that FK is not this
+/// migration's concern.
 void main() {
   late String path;
 
@@ -56,6 +61,17 @@ void main() {
         evaluated_text TEXT NOT NULL,
         verdict INTEGER NOT NULL,
         match_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE settings_entries (
+        id INTEGER NOT NULL PRIMARY KEY,
+        theme_mode INTEGER NOT NULL DEFAULT 0,
+        preferred_ingredients_language TEXT NOT NULL DEFAULT 'en',
+        remote_lookup_enabled INTEGER NOT NULL DEFAULT 1,
+        disclaimer_acknowledged_at INTEGER NULL,
+        webdav_base_url TEXT NULL,
+        webdav_username TEXT NULL,
+        certificate_fingerprint TEXT NULL,
+        last_sync_at INTEGER NULL
       );
     ''');
     final int ts = DateTime.utc(2026, 1, 2, 3, 4, 5).millisecondsSinceEpoch ~/ 1000;
@@ -109,4 +125,41 @@ void main() {
     expect(groups, hasLength(1));
     expect(groups.single.label, 'Hazelnut');
   });
+
+  test(
+    'a v2 database upgrades to v3 with appLanguage defaulting to null',
+    () async {
+      final sqlite3.Database seed = sqlite3.sqlite3.open(path);
+      seed.execute('''
+      CREATE TABLE settings_entries (
+        id INTEGER NOT NULL PRIMARY KEY,
+        theme_mode INTEGER NOT NULL DEFAULT 0,
+        preferred_ingredients_language TEXT NOT NULL DEFAULT 'en',
+        remote_lookup_enabled INTEGER NOT NULL DEFAULT 1,
+        disclaimer_acknowledged_at INTEGER NULL,
+        webdav_base_url TEXT NULL,
+        webdav_username TEXT NULL,
+        certificate_fingerprint TEXT NULL,
+        last_sync_at INTEGER NULL
+      );
+    ''');
+      seed.execute(
+        'INSERT INTO settings_entries '
+        '(id, theme_mode, preferred_ingredients_language, remote_lookup_enabled) '
+        "VALUES (1, 1, 'de', 1)",
+      );
+      seed.execute('PRAGMA user_version = 2');
+      seed.close();
+
+      final AppDatabase database = AppDatabase.forTesting(
+        NativeDatabase(File(path)),
+      );
+      addTearDown(database.close);
+
+      final settings = await database.settingsDao.get();
+      expect(settings.themeMode.index, 1);
+      expect(settings.preferredIngredientsLanguage, 'de');
+      expect(settings.appLanguage, isNull);
+    },
+  );
 }

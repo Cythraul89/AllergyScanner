@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/scan_capabilities.dart';
 import '../../core/widgets/verdict_banner.dart';
+import '../../l10n/app_localizations.dart';
 import 'scan_providers.dart';
 
 /// Start destination: the three ways into the one scan pipeline, plus the
@@ -22,9 +23,10 @@ class ScanScreen extends ConsumerWidget {
         ref.watch(activeAllergenTermsProvider).value ?? const <AllergenTerm>[];
     final List<Scan> recent =
         ref.watch(recentScansProvider).value ?? const <Scan>[];
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('AllergyScanner')),
+      appBar: AppBar(title: Text(l10n.appTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
@@ -32,36 +34,36 @@ class ScanScreen extends ConsumerWidget {
           if (capabilities.canScanBarcode)
             _ActionCard(
               icon: Icons.qr_code_scanner,
-              title: 'Scan barcode',
-              subtitle: 'Look up the product',
+              title: l10n.scanBarcodeTitle,
+              subtitle: l10n.scanBarcodeSubtitle,
               onTap: () => context.go('/scan/barcode'),
             ),
           if (capabilities.canRecognizeText)
             _ActionCard(
               icon: Icons.document_scanner_outlined,
-              title: 'Scan ingredient list',
-              subtitle: 'Read the text on the pack',
+              title: l10n.resultScanIngredientListAction,
+              subtitle: l10n.scanTextSubtitle,
               onTap: () => context.go('/scan/text'),
             ),
           _ActionCard(
             icon: Icons.keyboard_alt_outlined,
-            title: 'Enter manually',
-            subtitle: 'Barcode or ingredient text',
+            title: l10n.scanManualTitle,
+            subtitle: l10n.scanManualSubtitle,
             onTap: () => context.go('/scan/manual'),
           ),
           const SizedBox(height: 8),
           if (capabilities.isManualOnly)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'Camera scanning is not available on this platform — use '
-                '"Enter manually".',
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(l10n.scanManualOnlyNotice),
             ),
           _TermSummary(activeTerms: activeTerms),
           if (recent.isNotEmpty) ...<Widget>[
             const SizedBox(height: 24),
-            Text('Recent', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              l10n.scanRecentHeading,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const Divider(),
             ...recent.map(
               (Scan scan) => _RecentTile(
@@ -112,6 +114,7 @@ class _TermSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     // With no terms every check ends in "could not be checked" (R5.7), so this
     // is a warning rather than a count.
@@ -121,11 +124,11 @@ class _TermSummary extends StatelessWidget {
         child: ListTile(
           leading: Icon(Icons.warning_amber_rounded, color: colors.onErrorContainer),
           title: Text(
-            'No terms yet — add one first',
+            l10n.scanNoTermsTitle,
             style: TextStyle(color: colors.onErrorContainer),
           ),
           subtitle: Text(
-            'Without a term there is nothing to check against.',
+            l10n.scanNoTermsSubtitle,
             style: TextStyle(color: colors.onErrorContainer),
           ),
           onTap: () => context.go('/allergies'),
@@ -136,7 +139,7 @@ class _TermSummary extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.list_alt),
-      title: Text('Your list: ${activeTerms.length} active terms'),
+      title: Text(l10n.scanActiveTermsSummary(activeTerms.length)),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.go('/allergies'),
     );
@@ -151,18 +154,20 @@ class _RecentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: VerdictBadge(verdict: scan.verdict),
-      title: Text(scan.productNameSnapshot ?? _fallbackTitle(scan)),
+      title: Text(scan.productNameSnapshot ?? _fallbackTitle(l10n, scan)),
       subtitle: Text(
-        '${Formatters.matchCountLabel(scan.matchCount)} · '
-        '${Formatters.inputModeLabel(scan.inputMode)}',
+        '${Formatters.matchCountLabel(l10n, scan.matchCount)} · '
+        '${Formatters.inputModeLabel(l10n, scan.inputMode)}',
       ),
       trailing: Text(Formatters.time(scan.scannedAt)),
       onTap: onTap,
     );
   }
 
-  static String _fallbackTitle(Scan scan) => scan.barcode ?? 'text scan';
+  static String _fallbackTitle(AppLocalizations l10n, Scan scan) =>
+      scan.barcode ?? l10n.historyUnnamedScan;
 }

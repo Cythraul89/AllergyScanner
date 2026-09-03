@@ -13,6 +13,11 @@ src/web/
 *.g.dart
 *.freezed.dart
 
+# Generated code (flutter gen-l10n, from src/lib/l10n/app_*.arb) — regenerated
+# automatically by `flutter pub get`/`build`/`test` because pubspec.yaml has
+# `generate: true`; the .arb source files are not matched by this pattern.
+src/lib/l10n/app_localizations*.dart
+
 # Dart / Flutter
 .dart_tool/
 .packages

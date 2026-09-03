@@ -12,6 +12,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # State management (manual providers — no code generation).
   # Pinned to Riverpod 2 per the house style; 3.x exists and moves StateProvider
@@ -70,3 +72,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

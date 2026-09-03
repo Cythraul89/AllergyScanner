@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 class AppSettings extends Equatable {
   const AppSettings({
     this.themeMode = ThemeMode.system,
+    this.appLanguage,
     this.preferredIngredientsLanguage = 'en',
     this.remoteLookupEnabled = true,
     this.disclaimerAcknowledgedAt,
@@ -15,6 +16,9 @@ class AppSettings extends Equatable {
   });
 
   final ThemeMode themeMode;
+
+  /// `null` follows the system language; `'en'`/`'de'` overrides it.
+  final String? appLanguage;
   final String preferredIngredientsLanguage;
   final bool remoteLookupEnabled;
   final DateTime? disclaimerAcknowledgedAt;
@@ -31,6 +35,7 @@ class AppSettings extends Equatable {
   @override
   List<Object?> get props => [
     themeMode,
+    appLanguage,
     preferredIngredientsLanguage,
     remoteLookupEnabled,
     disclaimerAcknowledgedAt,

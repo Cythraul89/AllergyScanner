@@ -24,14 +24,60 @@ class ImportOutcome {
   bool get hasSkipped => skipped > 0;
 }
 
-/// Raised when an archive cannot be used. The message is user-facing.
+/// Raised when an archive cannot be used. Carries a structured [problem]
+/// rather than a hardcoded message — like `ScanLookupProblem`, the service
+/// layer has no `BuildContext` to localise text with, so the caller (which
+/// does) maps [problem] to a displayed string.
 class BackupFormatException implements Exception {
-  const BackupFormatException(this.message);
+  const BackupFormatException(this.problem);
 
-  final String message;
+  final BackupFormatProblem problem;
 
   @override
-  String toString() => message;
+  String toString() => problem.toString();
+}
+
+sealed class BackupFormatProblem {
+  const BackupFormatProblem();
+}
+
+/// The bytes could not be decoded as a ZIP archive at all.
+final class ArchiveUnreadable extends BackupFormatProblem {
+  const ArchiveUnreadable();
+}
+
+/// A valid ZIP without the `data.json` entry every archive this app writes
+/// has.
+final class ArchiveMissingData extends BackupFormatProblem {
+  const ArchiveMissingData();
+}
+
+/// `data.json` exists but is not valid JSON, or not a JSON object.
+final class ArchiveContentInvalid extends BackupFormatProblem {
+  const ArchiveContentInvalid();
+}
+
+/// The archive's `schemaVersion` is newer than this app's database schema.
+final class ArchiveSchemaTooNew extends BackupFormatProblem {
+  const ArchiveSchemaTooNew({
+    required this.archiveSchemaVersion,
+    required this.appSchemaVersion,
+  });
+
+  final int archiveSchemaVersion;
+  final int appSchemaVersion;
+}
+
+/// The archive's `backupFormatVersion` (manifest.json) is newer than this
+/// app's.
+final class ArchiveFormatTooNew extends BackupFormatProblem {
+  const ArchiveFormatTooNew({
+    required this.archiveFormatVersion,
+    required this.appFormatVersion,
+  });
+
+  final int archiveFormatVersion;
+  final int appFormatVersion;
 }
 
 /// Local ZIP export and import of everything the app stores.
@@ -132,14 +178,12 @@ class BackupService {
       archive = ZipDecoder().decodeBytes(bytes);
     } on Object catch (cause) {
       _log.warn('Backup import failed to decode: $cause');
-      throw const BackupFormatException('This file is not a readable archive.');
+      throw const BackupFormatException(ArchiveUnreadable());
     }
 
     final ArchiveFile? dataFile = archive.find(_dataEntry);
     if (dataFile == null) {
-      throw const BackupFormatException(
-        'The archive does not contain $_dataEntry.',
-      );
+      throw const BackupFormatException(ArchiveMissingData());
     }
 
     final Map<String, Object?> payload;
@@ -149,15 +193,16 @@ class BackupService {
               as Map<String, Object?>;
     } on Object catch (cause) {
       _log.warn('Backup import failed to parse: $cause');
-      throw const BackupFormatException('The archive content is not valid.');
+      throw const BackupFormatException(ArchiveContentInvalid());
     }
 
     final int archiveSchemaVersion = _asInt(payload['schemaVersion']) ?? 0;
     if (archiveSchemaVersion > _database.schemaVersion) {
       throw BackupFormatException(
-        'This backup was written by a newer version of the app '
-        '(schema $archiveSchemaVersion, this app supports '
-        '${_database.schemaVersion}).',
+        ArchiveSchemaTooNew(
+          archiveSchemaVersion: archiveSchemaVersion,
+          appSchemaVersion: _database.schemaVersion,
+        ),
       );
     }
 
@@ -170,9 +215,10 @@ class BackupService {
               1;
     if (archiveBackupFormatVersion > backupFormatVersion) {
       throw BackupFormatException(
-        'This backup was written by a newer version of the app '
-        '(archive format $archiveBackupFormatVersion, this app supports '
-        '$backupFormatVersion).',
+        ArchiveFormatTooNew(
+          archiveFormatVersion: archiveBackupFormatVersion,
+          appFormatVersion: backupFormatVersion,
+        ),
       );
     }
 
@@ -276,6 +322,7 @@ class BackupService {
         // Settings without any secret: the password stays in the key store.
         'settings': <String, Object?>{
           'themeMode': settings.themeMode.name,
+          'appLanguage': settings.appLanguage,
           'preferredIngredientsLanguage':
               settings.preferredIngredientsLanguage,
           'remoteLookupEnabled': settings.remoteLookupEnabled,
@@ -448,6 +495,9 @@ class BackupService {
       final Object? settings = payload['settings'];
       if (settings is Map) {
         final Map<String, Object?> values = settings.cast<String, Object?>();
+        await _database.settingsDao.setAppLanguage(
+          values['appLanguage'] as String?,
+        );
         await _database.settingsDao.setPreferredLanguage(
           values['preferredIngredientsLanguage'] as String? ?? 'en',
         );

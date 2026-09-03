@@ -5,7 +5,7 @@ signatures of the types that carry the app's logic. It is generated from the
 code by hand: when a signature changes, this file changes in the same commit.
 
 State: matches the source as written and compiled — `flutter analyze
---fatal-infos` and `flutter test` pass as of 2026-08-27 (see CLAUDE.md
+--fatal-infos` and `flutter test` pass as of 2026-09-03 (see CLAUDE.md
 "Current state"), though only on the Flutter/Dart host toolchain; no native
 Android/iOS device build has run yet.
 
@@ -35,7 +35,8 @@ All of `■` and the DAO/read providers live in `lib/core/providers.dart`; the
 
 ○ settingsProvider          StreamProvider<AppSettings>   ← settingsDao.watch()
    └─► ○ currentSettingsProvider   Provider<AppSettings>  (defaults while loading)
-          └─► ○ themeModeProvider  Provider<ThemeMode>
+          ├─► ○ themeModeProvider  Provider<ThemeMode>
+          └─► ○ appLocaleProvider  Provider<Locale?>  (null → MaterialApp follows the system locale)
 
 ○ allAllergenTermsProvider     StreamProvider<List<AllergenTerm>>
 ○ activeAllergenTermsProvider  StreamProvider<List<AllergenTerm>>
@@ -80,6 +81,7 @@ Rules visible in the graph:
 
 | Screen | Watches | Reads |
 |---|---|---|
+| `AllergyScannerApp` | `themeModeProvider`, `appLocaleProvider`, `routerProvider` | — |
 | `DisclaimerScreen` | — | `settingsDaoProvider` |
 | `AdaptiveShell` | `currentSettingsProvider` | — |
 | `ScanScreen` | `scanCapabilitiesProvider`, `activeAllergenTermsProvider`, `recentScansProvider` | — |
@@ -359,6 +361,17 @@ class BackupService {
 
 class ImportOutcome { final int imported; final int skipped; bool get hasSkipped; }
 
+/// Carries a structured reason, not a hardcoded message — BackupService has
+/// no BuildContext to localise with; the caller maps `problem` to a string
+/// (ARCHITECTURE §5.17), the same pattern as ScanLookupProblem.
+class BackupFormatException implements Exception { final BackupFormatProblem problem; }
+sealed class BackupFormatProblem {}
+final class ArchiveUnreadable      extends BackupFormatProblem {}
+final class ArchiveMissingData     extends BackupFormatProblem {}
+final class ArchiveContentInvalid  extends BackupFormatProblem {}
+final class ArchiveSchemaTooNew    extends BackupFormatProblem { final int archiveSchemaVersion; final int appSchemaVersion; }
+final class ArchiveFormatTooNew    extends BackupFormatProblem { final int archiveFormatVersion; final int appFormatVersion; }
+
 class ScanPhotoService {
   ScanPhotoService(Directory directory, {required LogService log});
   static Future<ScanPhotoService> open({required LogService log});  // <documents>/scan_photos
@@ -456,6 +469,7 @@ class ScanMatch {
 
 class AppSettings {
   final ThemeMode themeMode;                       // default system
+  final String? appLanguage;                       // null = follow system (R7.15)
   final String preferredIngredientsLanguage;       // default 'en'
   final bool remoteLookupEnabled;                  // default true
   final DateTime? disclaimerAcknowledgedAt, lastSyncAt;
@@ -538,6 +552,7 @@ class SettingsDao {
   Future<AppSettings> get();        // never writes
   Future<void> ensureDefaults({required String deviceLanguage});
   Future<void> setThemeMode(ThemeMode mode);
+  Future<void> setAppLanguage(String? language);   // null reverts to following the system
   Future<void> setRemoteLookupEnabled(bool enabled);
   Future<void> setPreferredLanguage(String language);
   Future<void> acknowledgeDisclaimer(DateTime at);

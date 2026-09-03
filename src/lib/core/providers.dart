@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart' show ThemeMode;
+import 'package:flutter/material.dart' show Locale, ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -137,3 +137,10 @@ final Provider<AppSettings> currentSettingsProvider = Provider<AppSettings>(
 final Provider<ThemeMode> themeModeProvider = Provider<ThemeMode>(
   (ref) => ref.watch(currentSettingsProvider).themeMode,
 );
+
+/// `null` lets `MaterialApp` resolve the system locale against
+/// `supportedLocales` itself (REQUIREMENTS R7.15).
+final Provider<Locale?> appLocaleProvider = Provider<Locale?>((ref) {
+  final String? language = ref.watch(currentSettingsProvider).appLanguage;
+  return language == null ? null : Locale(language);
+});

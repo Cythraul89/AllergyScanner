@@ -41,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -59,6 +59,11 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(scans, scans.name);
         await migrator.addColumn(scans, scans.shop);
         await migrator.addColumn(scans, scans.photoPath);
+      }
+      if (from < 3) {
+        // App UI language override; null (follow system) for every existing
+        // row, exactly today's behaviour.
+        await migrator.addColumn(settingsEntries, settingsEntries.appLanguage);
       }
       //
       // Reminder: changing TextNormalizer means recomputing

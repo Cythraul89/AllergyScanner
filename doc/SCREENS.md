@@ -484,12 +484,10 @@ flat active/inactive rendering, unchanged.
 ┌────────────────────────────────────────┐
 │ My allergy terms                  [🔍] │
 ├────────────────────────────────────────┤
-│  Hazelnut                     [●] ›    │
+│  Hazelnut                     [●] [⌃]  │
 │    hazelnut                            │
 │    haselnuss                           │
-│  Milk                         [●] ›    │
-│    milk                                │
-│    lait                                │
+│  Milk                         [●] [⌄]  │
 │                                        │
 │  OTHER TERMS                           │
 │  ─────────────────────────────────────  │
@@ -508,9 +506,12 @@ group is one substance, so "hazelnut" on and "haselnuss" off at the same time
 is not a state the UI offers. The `( + )` FAB opens *Add a group* — there is
 no separate "add a term" action; a new term is always created as (at least)
 a group of one [R7.9a]. Tapping a group header opens *Edit group* (below);
-tapping a member or an "Other terms" entry opens *Edit term* (below). Search
-matches a group's label, any of its members' text, or an ungrouped term's
-text.
+tapping a member or an "Other terms" entry opens *Edit term* (below). The
+`[⌃]`/`[⌄]` button collapses or expands a group's member list in place — a
+separate tap target from the header itself, so collapsing a group never
+navigates anywhere. Collapse state is per-session UI state, not stored;
+every group opens expanded [R7.8]. Search matches a group's label, any of
+its members' text, or an ungrouped term's text.
 
 ### Edit term screen
 
@@ -660,6 +661,7 @@ day within each shop, newest-active shop first.
 ├────────────────────────────────────────┤
 │  APPEARANCE                            │
 │   Theme                     System ▾   │
+│   App language               System ▾  │
 │                                        │
 │  SCANNING                              │
 │   Preferred ingredient language        │
@@ -682,6 +684,12 @@ day within each shop, newest-active shop first.
 
 - Every switch writes through a targeted DAO update, never a whole cached
   settings object [house rule 7].
+- `App language` — System / English / Deutsch. System (the default) follows
+  the device language; the other two override it for this app only,
+  independent of `Preferred ingredient language` below, which is a
+  completely separate setting (which language a multi-language product's
+  ingredient text is read from, not what language the app's own screens are
+  shown in) [R7.15].
 - `Look up products online` off → the Open Food Facts service is not called at
   all [R6.6]; the barcode flow then resolves only locally.
 - Sub-screens: **Local backup** (export ZIP / import ZIP, last export time),

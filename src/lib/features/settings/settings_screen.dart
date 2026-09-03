@@ -5,17 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
-
-/// Ingredient languages offered for the Open Food Facts lookup. Kept short on
-/// purpose — the generic `ingredients_text` is the fallback for everything else.
-const Map<String, String> kIngredientLanguages = <String, String>{
-  'en': 'English',
-  'de': 'German',
-  'fr': 'French',
-  'it': 'Italian',
-  'es': 'Spanish',
-  'nl': 'Dutch',
-};
+import '../../l10n/app_localizations.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -23,14 +13,23 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppSettings settings = ref.watch(currentSettingsProvider);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final Map<String, String> ingredientLanguages = <String, String>{
+      'en': l10n.languageEnglish,
+      'de': l10n.languageGerman,
+      'fr': l10n.languageFrench,
+      'it': l10n.languageItalian,
+      'es': l10n.languageSpanish,
+      'nl': l10n.languageDutch,
+    };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(
         children: <Widget>[
-          const _SectionHeader('APPEARANCE'),
+          _SectionHeader(l10n.settingsSectionAppearance),
           ListTile(
-            title: const Text('Theme'),
+            title: Text(l10n.settingsThemeLabel),
             trailing: DropdownButton<ThemeMode>(
               value: settings.themeMode,
               onChanged: (ThemeMode? mode) {
@@ -38,29 +37,51 @@ class SettingsScreen extends ConsumerWidget {
                   ref.read(settingsDaoProvider).setThemeMode(mode);
                 }
               },
-              items: const <DropdownMenuItem<ThemeMode>>[
+              items: <DropdownMenuItem<ThemeMode>>[
                 DropdownMenuItem<ThemeMode>(
                   value: ThemeMode.system,
-                  child: Text('System'),
+                  child: Text(l10n.commonSystem),
                 ),
                 DropdownMenuItem<ThemeMode>(
                   value: ThemeMode.light,
-                  child: Text('Light'),
+                  child: Text(l10n.settingsThemeLight),
                 ),
                 DropdownMenuItem<ThemeMode>(
                   value: ThemeMode.dark,
-                  child: Text('Dark'),
+                  child: Text(l10n.settingsThemeDark),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            title: Text(l10n.settingsAppLanguageTitle),
+            subtitle: Text(l10n.settingsAppLanguageSubtitle),
+            trailing: DropdownButton<String?>(
+              value: settings.appLanguage,
+              onChanged: (String? language) =>
+                  ref.read(settingsDaoProvider).setAppLanguage(language),
+              items: <DropdownMenuItem<String?>>[
+                DropdownMenuItem<String?>(
+                  child: Text(l10n.commonSystem),
+                ),
+                DropdownMenuItem<String?>(
+                  value: 'en',
+                  child: Text(l10n.languageEnglish),
+                ),
+                DropdownMenuItem<String?>(
+                  value: 'de',
+                  child: Text(l10n.languageGerman),
                 ),
               ],
             ),
           ),
 
-          const _SectionHeader('SCANNING'),
+          _SectionHeader(l10n.settingsSectionScanning),
           ListTile(
-            title: const Text('Preferred ingredient language'),
-            subtitle: const Text('Used when a product has several languages'),
+            title: Text(l10n.settingsIngredientLanguageLabel),
+            subtitle: Text(l10n.settingsIngredientLanguageSubtitle),
             trailing: DropdownButton<String>(
-              value: kIngredientLanguages.containsKey(
+              value: ingredientLanguages.containsKey(
                     settings.preferredIngredientsLanguage,
                   )
                   ? settings.preferredIngredientsLanguage
@@ -70,7 +91,7 @@ class SettingsScreen extends ConsumerWidget {
                   ref.read(settingsDaoProvider).setPreferredLanguage(language);
                 }
               },
-              items: kIngredientLanguages.entries
+              items: ingredientLanguages.entries
                   .map(
                     (MapEntry<String, String> entry) =>
                         DropdownMenuItem<String>(
@@ -82,50 +103,49 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           SwitchListTile(
-            title: const Text('Look up products online'),
-            subtitle: const Text(
-              'Off = no network requests at all; only locally stored products '
-              'are checked',
-            ),
+            title: Text(l10n.settingsRemoteLookupTitle),
+            subtitle: Text(l10n.settingsRemoteLookupSubtitle),
             value: settings.remoteLookupEnabled,
             // Targeted column write — never a whole cached settings object.
             onChanged: (bool value) =>
                 ref.read(settingsDaoProvider).setRemoteLookupEnabled(value),
           ),
 
-          const _SectionHeader('DATA'),
+          _SectionHeader(l10n.settingsSectionData),
           ListTile(
-            title: const Text('Local backup'),
-            subtitle: const Text('Export or import a ZIP archive'),
+            title: Text(l10n.settingsBackupTitle),
+            subtitle: Text(l10n.settingsBackupSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/backup'),
           ),
           ListTile(
-            title: const Text('Nextcloud sync'),
+            title: Text(l10n.settingsSyncTitle),
             subtitle: Text(
               settings.isSyncConfigured
                   ? settings.lastSyncAt == null
-                        ? 'Configured'
-                        : 'Last sync ${Formatters.dateTime(settings.lastSyncAt!)}'
-                  : 'Not set',
+                        ? l10n.settingsSyncConfigured
+                        : l10n.settingsSyncLastSync(
+                            Formatters.dateTime(settings.lastSyncAt!),
+                          )
+                  : l10n.settingsSyncNotSet,
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/sync'),
           ),
 
-          const _SectionHeader('ABOUT'),
+          _SectionHeader(l10n.settingsSectionAbout),
           ListTile(
-            title: const Text('About AllergyScanner'),
+            title: Text(l10n.settingsAboutTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/about'),
           ),
           ListTile(
-            title: const Text('Privacy'),
+            title: Text(l10n.settingsPrivacyTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/privacy'),
           ),
           ListTile(
-            title: const Text('App logs'),
+            title: Text(l10n.settingsLogsTitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/logs'),
           ),

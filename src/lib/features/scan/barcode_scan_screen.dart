@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/models/scan_input.dart';
+import '../../l10n/app_localizations.dart';
 import 'scan_actions.dart';
 import 'scan_providers.dart';
 
@@ -34,13 +35,14 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan barcode'),
+        title: Text(l10n.scanBarcodeTitle),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.flashlight_on_outlined),
-            tooltip: 'Torch',
+            tooltip: l10n.barcodeTorchTooltip,
             onPressed: () => _controller.toggleTorch(),
           ),
         ],
@@ -52,7 +54,7 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
               alignment: Alignment.center,
               children: <Widget>[
                 MobileScanner(controller: _controller, onDetect: _onDetect),
-                if (_busy) const _BusyOverlay(message: 'Looking up product…'),
+                if (_busy) _BusyOverlay(message: l10n.barcodeLookingUpProduct),
               ],
             ),
           ),
@@ -60,11 +62,11 @@ class _BarcodeScanScreenState extends ConsumerState<BarcodeScanScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: <Widget>[
-                const Text('Point at the barcode on the pack'),
+                Text(l10n.barcodePointAtBarcode),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () => context.go('/scan/manual'),
-                  child: const Text('Enter manually'),
+                  child: Text(l10n.scanManualTitle),
                 ),
               ],
             ),

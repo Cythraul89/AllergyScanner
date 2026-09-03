@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/product.dart';
 import '../../core/providers.dart';
 import '../../core/utils/scan_capabilities.dart';
+import '../../l10n/app_localizations.dart';
 import 'result_providers.dart';
 
 /// Correcting a product locally. The correction wins over remote data from now
@@ -68,14 +69,15 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
   @override
   Widget build(BuildContext context) {
     final ScanCapabilities capabilities = ref.watch(scanCapabilitiesProvider);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Correct product data'),
+        title: Text(l10n.resultCorrectProductAction),
         actions: <Widget>[
           TextButton(
             onPressed: _loading || _saving ? null : _save,
-            child: const Text('Save'),
+            child: Text(l10n.commonSave),
           ),
         ],
       ),
@@ -84,13 +86,13 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
-                Text('Barcode ${widget.barcode}'),
+                Text(l10n.productBarcodeLabel(widget.barcode)),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Product name',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.productNameLabel,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -99,9 +101,9 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
                     Expanded(
                       child: TextField(
                         controller: _brandsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Brand',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l10n.productBrandLabel,
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -109,9 +111,9 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
                     Expanded(
                       child: TextField(
                         controller: _quantityController,
-                        decoration: const InputDecoration(
-                          labelText: 'Quantity',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l10n.productQuantityLabel,
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -123,9 +125,9 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
                   minLines: 5,
                   maxLines: 14,
                   keyboardType: TextInputType.multiline,
-                  decoration: const InputDecoration(
-                    labelText: 'Ingredient text',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.manualIngredientTextSegment,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -133,7 +135,7 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
                   OutlinedButton.icon(
                     onPressed: () => context.go('/scan/text'),
                     icon: const Icon(Icons.document_scanner_outlined),
-                    label: const Text('Scan an ingredient list instead'),
+                    label: Text(l10n.productScanInsteadAction),
                   ),
                 const SizedBox(height: 16),
                 Card(
@@ -145,9 +147,7 @@ class _ProductEditScreenState extends ConsumerState<ProductEditScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Your corrections are kept on this device and are '
-                            'never overwritten by a later lookup. Nothing is '
-                            'sent to Open Food Facts.',
+                            l10n.productCorrectionNote,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),

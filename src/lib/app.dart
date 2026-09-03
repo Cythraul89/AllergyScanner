@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' as intl;
 
 import 'core/providers.dart';
+import 'l10n/app_localizations.dart';
 import 'core/utils/scan_capabilities.dart';
 import 'features/allergies/allergies_screen.dart';
 import 'features/allergies/group_edit_screen.dart';
@@ -187,6 +189,17 @@ class AllergyScannerApp extends ConsumerWidget {
       theme: _themeFor(Brightness.light),
       darkTheme: _themeFor(Brightness.dark),
       themeMode: ref.watch(themeModeProvider),
+      locale: ref.watch(appLocaleProvider),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      // Formatters.dateTime/date/time/dayHeader follow Intl.defaultLocale,
+      // not a parameter — kept in sync with whatever locale MaterialApp just
+      // resolved (explicit override or system), so month names etc. match
+      // the app's language without threading a Locale through every call.
+      builder: (BuildContext context, Widget? child) {
+        intl.Intl.defaultLocale = Localizations.localeOf(context).toString();
+        return child!;
+      },
       routerConfig: ref.watch(routerProvider),
     );
   }
