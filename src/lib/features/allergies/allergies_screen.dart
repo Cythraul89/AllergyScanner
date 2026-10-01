@@ -1,14 +1,22 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
+import '../../core/services/allergy_list_json_service.dart';
+import '../../core/utils/formatters.dart';
 import '../../core/widgets/empty_view.dart';
 import '../../core/widgets/error_view.dart';
 import '../../l10n/app_localizations.dart';
 import 'allergen_group_providers.dart';
 import 'allergies_providers.dart';
+
+enum _AllergyListMenuAction { exportJson, importJson }
 
 /// The user's allergy list: one section per group, then ungrouped terms.
 class AllergiesScreen extends ConsumerStatefulWidget {
@@ -32,7 +40,32 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.allergiesTitle)),
+      appBar: AppBar(
+        title: Text(l10n.allergiesTitle),
+        actions: <Widget>[
+          PopupMenuButton<_AllergyListMenuAction>(
+            onSelected: (_AllergyListMenuAction action) {
+              switch (action) {
+                case _AllergyListMenuAction.exportJson:
+                  _exportList(l10n);
+                case _AllergyListMenuAction.importJson:
+                  _importList(l10n);
+              }
+            },
+            itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<_AllergyListMenuAction>>[
+                  PopupMenuItem<_AllergyListMenuAction>(
+                    value: _AllergyListMenuAction.exportJson,
+                    child: Text(l10n.allergiesExportAction),
+                  ),
+                  PopupMenuItem<_AllergyListMenuAction>(
+                    value: _AllergyListMenuAction.importJson,
+                    child: Text(l10n.allergiesImportAction),
+                  ),
+                ],
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/allergies/groups/add'),
         tooltip: l10n.allergiesAddGroupTooltip,
@@ -122,6 +155,83 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
         .where((AllergenTerm term) => term.term.toLowerCase().contains(needle))
         .toList(growable: false);
   }
+
+  Future<void> _exportList(AppLocalizations l10n) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      final File file = await ref
+          .read(allergyListJsonServiceProvider)
+          .exportToFile();
+      await SharePlus.instance.share(
+        ShareParams(files: <XFile>[XFile(file.path)]),
+      );
+    } on Object catch (cause) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.allergiesExportFailed(cause.toString()))),
+      );
+    }
+  }
+
+  Future<void> _importList(AppLocalizations l10n) async {
+    final PlatformFile? picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: <String>['json'],
+    );
+    final String? path = picked?.path;
+    if (path == null || !mounted) return;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final AllergyListImportOutcome outcome = await ref
+          .read(allergyListJsonServiceProvider)
+          .importFromFile(File(path));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_describeOutcome(l10n, outcome))),
+      );
+    } on AllergyListFormatException catch (exception) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(_describeProblem(l10n, exception.problem))),
+      );
+    } on Object catch (cause) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.allergiesImportFailed(cause.toString()))),
+      );
+    }
+  }
+
+  /// Three independent sentences rather than one combinatorial message:
+  /// "already on your list" and "could not be read" are different facts, and
+  /// reporting a dropped entry as a duplicate would tell the user an allergen
+  /// is covered when it is not.
+  static String _describeOutcome(
+    AppLocalizations l10n,
+    AllergyListImportOutcome outcome,
+  ) {
+    final StringBuffer buffer = StringBuffer(
+      l10n.allergiesImportedCount(outcome.termsAdded, outcome.groupsCreated),
+    );
+    if (outcome.hasSkipped) {
+      buffer.write(' ${l10n.allergiesImportSkipped(outcome.termsSkipped)}');
+    }
+    if (outcome.hasRejected) {
+      buffer.write(
+        ' ${l10n.allergiesImportRejected(outcome.termsRejected, outcome.groupsRejected)}',
+      );
+    }
+    return buffer.toString();
+  }
+
+  static String _describeProblem(
+    AppLocalizations l10n,
+    AllergyListFormatProblem problem,
+  ) {
+    switch (problem) {
+      case AllergyListContentInvalid():
+        return l10n.allergiesImportProblemContentInvalid;
+      case AllergyListFormatTooNew():
+        return l10n.allergiesImportProblemFormatTooNew;
+    }
+  }
 }
 
 class _GroupSection extends ConsumerStatefulWidget {
@@ -144,9 +254,28 @@ class _GroupSectionState extends ConsumerState<_GroupSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         ListTile(
-          title: Text(
-            group.group.label,
-            style: Theme.of(context).textTheme.titleMedium,
+          leading: group.group.color == null
+              ? null
+              : CircleAvatar(radius: 10, backgroundColor: group.group.color),
+          title: Row(
+            children: <Widget>[
+              Flexible(
+                child: Text(
+                  group.group.label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (group.group.criticality != null) ...<Widget>[
+                const SizedBox(width: 8),
+                Chip(
+                  label: Text(
+                    Formatters.criticalityLabel(l10n, group.group.criticality!),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
+            ],
           ),
           subtitle: Text(l10n.allergiesGroupNameCount(group.terms.length)),
           trailing: Row(

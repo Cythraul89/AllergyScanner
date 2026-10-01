@@ -27,6 +27,15 @@ on:
         required: false
         default: 14
         type: number
+      application-id-prefix:
+        description: >-
+          Reverse-DNS prefix for the Android applicationId and the iOS bundle id,
+          passed to `flutter create --org`. The template default (com.example)
+          is rejected by both stores and is immutable after first publish, so
+          this must be a domain you control before any real release.
+        required: false
+        default: 'com.allergyscanner'
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -63,7 +72,7 @@ jobs:
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
       - name: Scaffold Android platform
-        run: flutter create --platforms=android .
+        run: flutter create --platforms=android --org '${{ inputs.application-id-prefix }}' .
 
       # CAMERA: barcode scanning (mobile_scanner) and the photo for text recognition
       # (image_picker). INTERNET: Open Food Facts and WebDAV.
@@ -89,10 +98,13 @@ jobs:
 
       # compileSdk 37 is required by flutter_secure_storage (compileSdk is backward
       # compatible, so this also covers flutter_plugin_android_lifecycle's compileSdk 36).
-      # minSdk is pinned explicitly because google_mlkit_text_recognition documents
-      # minSdkVersion 21 — a change to the Flutter default must not be able to lower it
-      # silently.
-      - name: Patch build.gradle.kts (compileSdk, minSdk)
+      #
+      # minSdk is deliberately NOT patched: `flutter.minSdkVersion` is 24 on the
+      # pinned Flutter, which already satisfies every plugin here
+      # (flutter_secure_storage 24, mobile_scanner 23, ML Kit 21). This step used
+      # to pin 21, which *lowered* it below Flutter's own floor and failed the
+      # build at the generated minSdk check and at manifest merge.
+      - name: Patch build.gradle.kts (compileSdk)
         shell: python3 {0}
         run: |
           path = 'android/app/build.gradle.kts'
@@ -100,11 +112,9 @@ jobs:
               content = f.read()
           content = content.replace(
               'compileSdk = flutter.compileSdkVersion', 'compileSdk = 37', 1)
-          content = content.replace(
-              'minSdk = flutter.minSdkVersion', 'minSdk = 21', 1)
           with open(path, 'w') as f:
               f.write(content)
-          print('Patched compileSdk = 37, minSdk = 21')
+          print('Patched compileSdk = 37')
 
       # google_mlkit_text_recognition's core TextRecognizer references the optional
       # per-script recognizer classes (Chinese, Devanagari, Japanese, Korean), which only
@@ -137,11 +147,23 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          # A missing one of these used to write an empty value and surface much
+          # later as "keystore password was incorrect" — fail here instead.
+          for name in STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::ANDROID_RELEASE_KEYSTORE_B64 is set but $name is empty." \
+                   "Set all four signing secrets, or none of them."
+              exit 1
+            fi
+          done
           echo "$KEYSTORE_B64" | base64 -d > android/release.keystore
+          # key.properties is read by java.util.Properties, where '\' is an escape
+          # character: an unescaped backslash in a password is silently dropped.
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g'; }
           cat > android/key.properties <<EOF
-          storePassword=$STORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
+          storePassword=$(esc "$STORE_PASSWORD")
+          keyPassword=$(esc "$KEY_PASSWORD")
+          keyAlias=$(esc "$KEY_ALIAS")
           storeFile=../release.keystore
           EOF
 
@@ -224,7 +246,7 @@ jobs:
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
       - name: Scaffold iOS platform
-        run: flutter create --platforms=ios .
+        run: flutter create --platforms=ios --org '${{ inputs.application-id-prefix }}' .
 
       # A missing usage description is an App Store rejection and a runtime crash the
       # first time the camera or the library is opened.
@@ -233,12 +255,24 @@ jobs:
         run: |
           path = 'ios/Runner/Info.plist'
           keys = {
+              # Must stay true: a photo used for text recognition really is
+              # deleted straight after, but a photo the user attaches to a
+              # history entry IS kept (PRIVACY.md §4). Claiming otherwise here
+              # is both an App Store review risk and simply false.
               'NSCameraUsageDescription':
-                  'AllergyScanner uses the camera to scan barcodes and to photograph '
-                  'ingredient lists. Images are processed on your device and are not stored.',
+                  'AllergyScanner uses the camera to scan barcodes, to photograph '
+                  'ingredient lists, and to attach a photo to an entry in your '
+                  'history. Images are processed on your device and are never '
+                  'uploaded. A photo used to read an ingredient list is deleted '
+                  'straight after it is read; a photo you attach to a history entry '
+                  'is kept on your device until you remove it.',
               'NSPhotoLibraryUsageDescription':
-                  'AllergyScanner reads an ingredient list from an image you select. '
-                  'The image is processed on your device and is not stored.',
+                  'AllergyScanner reads an ingredient list from an image you select, '
+                  'or attaches an image you select to an entry in your history. '
+                  'Images are processed on your device and are never uploaded. An '
+                  'image used to read an ingredient list is not stored; one you '
+                  'attach to a history entry is kept on your device until you '
+                  'remove it.',
           }
           with open(path) as f:
               content = f.read()
@@ -256,27 +290,44 @@ jobs:
       - name: Patch iOS deployment target (15.5)
         shell: python3 {0}
         run: |
+          import os
           import re
+
+          # Current Flutter resolves plugins via Swift Package Manager and no
+          # longer always generates a Podfile. Opening it unconditionally used
+          # to raise FileNotFoundError here, which killed the job *before* the
+          # pbxproj patch below — the one that actually sets the deployment
+          # target ML Kit requires. Patch it only if CocoaPods is in play.
           podfile = 'ios/Podfile'
-          with open(podfile) as f:
-              content = f.read()
-          content = re.sub(r"#\s*platform :ios.*", "platform :ios, '15.5'", content, count=1)
-          if 'platform :ios' not in content:
-              content = "platform :ios, '15.5'\n" + content
-          else:
-              content = re.sub(r"platform :ios, '[\d.]+'", "platform :ios, '15.5'",
+          if os.path.exists(podfile):
+              with open(podfile) as f:
+                  content = f.read()
+              content = re.sub(r"#\s*platform :ios.*", "platform :ios, '15.5'",
                                content, count=1)
-          with open(podfile, 'w') as f:
-              f.write(content)
+              if 'platform :ios' not in content:
+                  content = "platform :ios, '15.5'\n" + content
+              else:
+                  content = re.sub(r"platform :ios, '[\d.]+'", "platform :ios, '15.5'",
+                                   content, count=1)
+              with open(podfile, 'w') as f:
+                  f.write(content)
+              print('Patched ios/Podfile')
+          else:
+              print('No ios/Podfile (SPM project) — skipping that patch')
 
           project = 'ios/Runner.xcodeproj/project.pbxproj'
           with open(project) as f:
               proj = f.read()
-          proj = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;',
-                        'IPHONEOS_DEPLOYMENT_TARGET = 15.5;', proj)
+          proj, count = re.subn(r'IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;',
+                                'IPHONEOS_DEPLOYMENT_TARGET = 15.5;', proj)
+          if count == 0:
+              raise SystemExit(
+                  'IPHONEOS_DEPLOYMENT_TARGET not found in project.pbxproj — the '
+                  'template changed; ML Kit needs 15.5 and would fail at pod/build '
+                  'time, so failing loudly here instead.')
           with open(project, 'w') as f:
               f.write(proj)
-          print('iOS deployment target set to 15.5')
+          print(f'iOS deployment target set to 15.5 ({count} configurations)')
 
       - name: Build iOS (${{ matrix.mode }}, unsigned)
         run: |

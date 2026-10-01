@@ -5,7 +5,11 @@ user's own list of allergy-relevant substances. The product's ingredient text
 is obtained either from a barcode lookup or from the camera via on-device text
 recognition, and is matched locally against the user's terms.
 
-Status: requirements draft for v0.1. No code exists yet.
+Status: implemented for v0.1 against this document. `flutter analyze
+--fatal-infos` is clean and 193 tests pass on the Flutter/Dart host toolchain
+(2026-10-01); no native Android or iOS device build has been verified yet, so
+the camera, ML Kit and WebDAV paths are specified and written but not
+exercised on a device.
 Repository: `AllergyApp` · display name: `AllergyScanner` ·
 pubspec name: `allergy_scanner` · package/artifact name: `allergy-scanner`.
 
@@ -122,6 +126,14 @@ SQLite via Drift. String UUID primary keys except where noted. Timestamps are
 stored as UTC `DateTime`. No monetary values exist in this app, so `decimal` is
 not a dependency.
 
+- **R4.13** A database file whose own schema version is *newer* than the
+  running build refuses to open, with an error naming both versions, instead
+  of being opened as-is. Treating it as an upgrade would run no migration
+  step at all and then stamp the older version onto the file, after which the
+  newer build could never open it again — a silent, irreversible data loss.
+  Downgrading is therefore an explicit "reinstall the newer version, or
+  restore from a backup", never an automatic one.
+
 ### 4.1 `allergen_terms` — the user's allergy list
 
 | Field | Type | Notes |
@@ -150,6 +162,8 @@ not a dependency.
 |---|---|---|
 | `id` | text, PK | UUID v4 |
 | `label` | text, not null | Display name, e.g. "Hazelnut"; not matched, not required to be unique |
+| `color` | int, nullable | ARGB value from a fixed swatch set, or `null` for none; purely visual, never read by the matcher (R7.16) |
+| `criticality` | int (enum), nullable | `low` \| `medium` \| `high`, or `null` for none (R7.16) |
 | `createdAt` | datetime, not null | |
 | `updatedAt` | datetime, not null | |
 
@@ -219,7 +233,8 @@ not a dependency.
 - **R4.7** History is self-contained: deleting a product or an allergy term
   never makes a past scan unreadable (§4.4).
 - **R4.8** History is capped at `kMaxScanHistory = 500` entries; the oldest
-  are pruned on insert. The cap is shown in Settings.
+  are pruned on insert. The cap is stated on the History screen itself, as a
+  footer note under the list.
 - **R4.11** A scan's `name`, `shop` and `photoPath` are set after the fact via
   *Edit details*, never at scan time; editing them never re-evaluates the
   verdict and never touches `evaluatedText`, so R4.7's snapshot guarantee is
@@ -437,13 +452,15 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 
 ### 7.3 Allergies
 
-- **R7.8** List of terms, active ones first, with an edit sheet, an active
-  toggle, swipe-to-delete with undo, and a search field. Terms may be
-  organised into groups (§4.1a); the screen shows one collapsible section
-  per group, then an "Other terms" section for ungrouped terms, unchanged in
-  rendering from today's flat list. The active toggle appears on the group
-  header for a grouped term (R4.1d) and on the term itself only when it is
-  ungrouped.
+- **R7.8** List of terms with an edit sheet, an active toggle,
+  swipe-to-delete with undo, and a search field. Terms may be organised into
+  groups (§4.1a); the screen shows one collapsible section per group, then an
+  "Other terms" section for ungrouped terms. Groups are ordered by their
+  label and the terms inside each one, like those under "Other terms",
+  alphabetically by normalised form — active and inactive entries are
+  interleaved, so an entry never moves when it is toggled. The active toggle
+  appears on the group header for a grouped term (R4.1d) and on the term
+  itself only when it is ungrouped.
 - **R7.9** Deleting a term does not alter past scans (§4.4). Deleting a
   group (R4.1b) does not delete its member terms — they reappear ungrouped
   under "Other terms".
@@ -452,6 +469,22 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   standalone term. A term still becomes, or stays, ungrouped by removing it
   from a group (R4.1b) or by deleting the group it was in; the edit sheet
   (R7.8) is unchanged for an existing term either way.
+- **R7.16** A group may optionally be tagged with a color (a fixed set of
+  swatches, plus "None") and a criticality (None/Low/Medium/High) on the
+  add/edit group screen (R4.1e); both default to unset and are written
+  together as one "appearance" update. Criticality is a plain relative
+  scale, not a clinical or safety claim (§5.6), and neither attribute is
+  read by the matcher or changes matching in any way (§5.3). When set, the
+  Allergies screen shows the group's color as a leading dot and its
+  criticality as a chip next to the group's label.
+- **R7.17** The Allergies screen's app bar offers *Export as JSON* and
+  *Import from JSON* (§8.6–§8.8): export shares the written file through the
+  platform share sheet, import picks a `.json` file through the system file
+  picker. The import result or a refusal reason is shown to the user; the
+  result is built from up to three independent sentences — what was added
+  (terms and new groups), what was already on the list (R8.7's skipped
+  count), and what could not be read (R8.7's rejected counts) — so a skip
+  and a rejection are never reported as the same thing.
 
 ### 7.4 History
 
@@ -486,19 +519,20 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
 
 ## 8. Backup, export and sync
 
-- **R8.1** Local ZIP export contains all four data tables plus settings
-  (without secrets) as JSON, and a manifest with app version, schema version
-  and archive format version (`backupFormatVersion`, currently 2 —
-  independent of the schema version). Any history photo a scan has attached
-  travels as its own archive entry (raw bytes, named after its own
-  `photoPath`), not embedded in the JSON. Filename:
-  `allergy_scanner_YYYYMMDD_HHmmss.zip`.
+- **R8.1** Local ZIP export contains every data table plus settings (without
+  secrets) as JSON, and a manifest with app version, schema version and
+  archive format version (`backupFormatVersion`, currently 3 — independent of
+  the schema version). Any history photo a scan has attached travels as its
+  own archive entry (raw bytes, named after its own `photoPath`), not
+  embedded in the JSON. Filename: `allergy_scanner_YYYYMMDD_HHmmss.zip`.
 - **R8.2** Import is transactional, refuses an archive with a newer schema
   version or a newer archive format version than the app, and reports a
   skip count for rows it could not attach; the caller surfaces that count
-  when > 0. An archive with no `name`/`shop`/`photoPath` fields and no photo
-  entries (written before backup format version 2) still imports correctly
-  — those fields are simply absent, read as `null`.
+  when > 0. Older archives still import correctly, their newer fields simply
+  absent and read as `null`: one with no `name`/`shop`/`photoPath` fields and
+  no photo entries (format version 1), and one with no `allergenGroups` list
+  and no `groupId` on a term (format version 2), which restores every term
+  ungrouped exactly as that archive was written.
 - **R8.3** Nextcloud/WebDAV sync uploads and downloads exactly that archive
   over basic auth. Optional SHA-256 certificate pinning for self-signed
   servers; a fingerprint mismatch rejects the connection.
@@ -508,6 +542,61 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   immediately re-prompt.
 - **R8.5** Sync is entirely optional; every feature works with it unconfigured
   and with no network at all.
+- **R8.6** Independently of §8.1's full-device ZIP, the allergy list (groups
+  + terms only — not scans, products or settings) can be exported as a
+  standalone, pretty-printed JSON file:
+  `{"app", "allergyListFormatVersion", "exportedAt", "groups": [{"label",
+  "color", "criticality", "terms": [{"term", "note", "isActive"}]}],
+  "ungroupedTerms": [...]}`. `allergyListFormatVersion` (currently 1) is
+  independent of both the schema version and `backupFormatVersion`. No
+  internal id or timestamp is carried — it is meant for sharing a list
+  between devices or people (e.g. with a caregiver or a school), not a
+  byte-perfect backup. Filename: `allergy_list_YYYYMMDD_HHmmss.json`.
+- **R8.7** Import always merges, never replaces or deletes, and runs in one
+  transaction, so a file that turns out to be malformed part-way through
+  cannot leave a half-merged list behind. A group is matched to an existing
+  one by its trimmed, case-insensitive label (reused if found — its own
+  color/criticality are never overwritten by the import — created if not),
+  and a new group is created only once one of its terms is actually
+  insertable, so a group whose members all turn out to be duplicates leaves
+  no empty group behind; a group entry that genuinely carries no terms still
+  round-trips as an empty group. A term already on the list (by its
+  normalised form, R4.1) is skipped rather than duplicated or overwritten. A
+  term imported into a group takes that group's active state, not the
+  file's, so R4.1d's "a group is never partially active" invariant holds
+  after an import too; an ungrouped term keeps the file's value.
+- **R8.7a** The outcome counts groups created, terms added, terms *skipped*
+  and terms *rejected* separately. Skipped means "already on your list";
+  rejected means the entry could not be read at all — missing or ill-typed
+  `term`, shorter than R4.2's floor, or longer than the 200-character column
+  bound. Reporting a rejection as a skip would tell the user an allergen is
+  covered when it was in fact dropped, so the two are never merged. A group
+  entry whose own label is missing, empty or over-long is counted as a
+  rejected *group*, but its member terms are still imported — ungrouped,
+  never discarded.
+- **R8.8** Import refuses content that is not valid JSON, not a JSON object,
+  or a JSON object carrying neither `groups` nor `ungroupedTerms` (without
+  that last check an arbitrary `.json` file "succeeds" with nothing
+  imported), and a file whose `allergyListFormatVersion` is newer than the
+  app's — mirroring R8.2's schema/format-version refusal for the full ZIP
+  backup. Within an accepted file, every field is read defensively: a value
+  of the wrong type is counted under R8.7a rather than raised as an error,
+  so a hand-edited or third-party file degrades into counts, never into a
+  crash message.
+- **R8.9** The full ZIP backup/restore (§8.1–§8.2, and therefore WebDAV
+  sync, §8.3) covers the complete allergy list, group organisation included:
+  the `allergen_groups` table with each group's R7.16 color and criticality,
+  and `groupId` on every exported term. Groups are restored before terms,
+  and a term whose `groupId` names a group the archive does not carry is
+  restored ungrouped rather than failing the import. Restoring onto a device
+  that already holds the same term under a different id replaces that local
+  row — `normalizedTerm` is unique (R4.1), so the two cannot coexist — which
+  leaves history intact under R4.7, since `scan_matches.allergenTermId` is
+  nullable `setNull` and the match keeps its `termSnapshot`. The restored
+  settings include `themeMode`, `disclaimerAcknowledgedAt` (so the
+  disclaimer gate does not reappear after a restore) and
+  `certificateFingerprint` (so a restore does not clear the pinning that
+  made the WebDAV server reachable in the first place).
 
 ---
 

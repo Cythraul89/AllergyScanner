@@ -1,10 +1,14 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/daos/allergen_group_dao.dart';
 import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
+import '../../core/models/enums.dart';
 import '../../core/providers.dart';
+import '../../core/services/allergy_list_json_service.dart';
 import '../../core/services/translation_service.dart';
 
 /// Here rather than in `core/`: only the Allergies feature's screens read
@@ -40,13 +44,19 @@ class AllergenGroupActions {
   final Uuid _uuid;
   final DateTime Function() _now;
 
-  Future<String> create({required String label}) async {
+  Future<String> create({
+    required String label,
+    Color? color,
+    GroupCriticality? criticality,
+  }) async {
     final String id = _uuid.v4();
     final DateTime timestamp = _now();
     await _dao.insertGroup(
       AllergenGroup(
         id: id,
         label: label.trim(),
+        color: color,
+        criticality: criticality,
         createdAt: timestamp,
         updatedAt: timestamp,
       ),
@@ -57,9 +67,30 @@ class AllergenGroupActions {
   Future<void> rename({required String id, required String label}) =>
       _dao.updateLabel(id: id, label: label.trim(), updatedAt: _now());
 
+  /// Always writes both fields — the one screen that edits them always
+  /// submits the full appearance state, never a partial update.
+  Future<void> setAppearance({
+    required String id,
+    Color? color,
+    GroupCriticality? criticality,
+  }) => _dao.setAppearance(
+    id: id,
+    color: Value(color),
+    criticality: Value(criticality),
+    updatedAt: _now(),
+  );
+
   /// Member terms are kept, ungrouped — never deleted with the group.
   Future<void> delete(String id) => _dao.deleteById(id);
 }
+
+final Provider<AllergyListJsonService> allergyListJsonServiceProvider =
+    Provider<AllergyListJsonService>(
+      (ref) => AllergyListJsonService(
+        database: ref.watch(appDatabaseProvider),
+        log: ref.watch(logServiceProvider),
+      ),
+    );
 
 final Provider<TranslationSuggestionService> translationSuggestionsProvider =
     Provider<TranslationSuggestionService>(

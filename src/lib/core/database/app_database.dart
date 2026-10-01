@@ -41,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -49,6 +49,19 @@ class AppDatabase extends _$AppDatabase {
       await migrator.createAll();
     },
     onUpgrade: (Migrator migrator, int from, int to) async {
+      // Drift calls onUpgrade for a *downgrade* too, where every `if (from <
+      // N)` below is false — it would silently do nothing and then stamp the
+      // older schemaVersion onto a newer database. Re-installing the newer
+      // build would then re-run the addColumn steps against columns that
+      // already exist ("duplicate column"), and the database would never open
+      // again. Fail here instead, while the data is still intact.
+      if (from > to) {
+        throw StateError(
+          'Cannot open a database created by a newer version of the app '
+          '(database schema v$from, this build expects v$to). Install the '
+          'newer version again, or restore from a backup.',
+        );
+      }
       if (from < 2) {
         // Allergen groups: an organisational layer over existing terms,
         // added nullable so every pre-existing term simply starts ungrouped.
@@ -64,6 +77,21 @@ class AppDatabase extends _$AppDatabase {
         // App UI language override; null (follow system) for every existing
         // row, exactly today's behaviour.
         await migrator.addColumn(settingsEntries, settingsEntries.appLanguage);
+      }
+      if (from >= 2 && from < 4) {
+        // Optional visual color + severity tag on a group, added after the
+        // fact — null for every existing group, exactly today's behaviour.
+        //
+        // Guarded by `from >= 2`: `Migrator.createTable` always builds a
+        // table from its *current* Dart definition, not a per-version
+        // snapshot (this project hand-writes migrations rather than using
+        // drift_dev's schema-snapshot tooling — see migration_test.dart's own
+        // doc comment). So the `from < 2` block above already creates
+        // `allergenGroups` with these two columns included; adding them
+        // again here for a from-v1 upgrade fails with "duplicate column".
+        // Confirmed empirically via the migration tests, not assumed.
+        await migrator.addColumn(allergenGroups, allergenGroups.color);
+        await migrator.addColumn(allergenGroups, allergenGroups.criticality);
       }
       //
       // Reminder: changing TextNormalizer means recomputing

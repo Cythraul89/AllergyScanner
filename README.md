@@ -10,13 +10,15 @@ account.
 > verified; recognised text can be wrong; only the exact words you list are
 > found, not their synonyms. Always read the packaging.
 
-**Status: unverified source.** The full specification (`doc/*`) and the complete
-Dart source under `src/` are written, but **nothing has been compiled, analysed
-or tested** — no Flutter SDK was available in the environment that wrote it, and
-no dependency has ever been resolved. Generated Drift code (`*.g.dart`) does not
-exist yet, so the project cannot compile until `flutter pub get` and
-`build_runner` have been run. Expect to fix analyzer findings on the first real
-run; see "Getting started".
+**Status: builds and passes its tests on the host toolchain; not yet verified
+on a device.** As of 2026-10-01, `flutter pub get`, `build_runner`,
+`flutter analyze --fatal-infos` and `flutter test` (193 tests) are all green on
+Flutter 3.47.1 / Dart 3.13.1. What has **not** been verified is any real
+Android or iOS device or emulator build, so the camera, on-device text
+recognition and WebDAV paths are written and specified but never executed on
+real hardware; CI's Android and iOS jobs are the next gate. Generated code
+(`*.g.dart`, `app_localizations*.dart`) and the `android/`/`ios/` folders are
+not committed — see "Getting started" for the two commands that produce them.
 
 ---
 
@@ -27,6 +29,10 @@ run; see "Getting started".
 - Scan a barcode with the camera and look the product up in Open Food Facts.
 - Photograph the ingredient list and read it with on-device text recognition.
 - Type or paste a barcode or an ingredient list on any platform.
+- Recognised text is narrowed to the ingredients section when a localized
+  "Ingredients:" marker is found (DE/EN/FR/IT), so the rest of the packaging
+  cannot produce a false match; you always see and can edit the text before
+  it is checked.
 - A clear verdict: *contains terms from your list* / *no term found* /
   *could not be checked* — with every match shown in its surrounding text.
 
@@ -35,11 +41,25 @@ run; see "Getting started".
 - Free-text terms, matched case- and accent-insensitively.
 - Terms can be deactivated without deleting them.
 - Notes per term.
+- Group related terms (e.g. the same allergen in different languages), with
+  an optional color and a plain Low/Medium/High criticality tag — visual
+  organisation only, never a safety assessment.
+- Optional translation *suggestions* when adding names to a group (MyMemory,
+  keyless, DE/EN/ES/FR/IT/NO/SV) — nothing is ever added without your
+  review, and it is off whenever online lookup is off.
+- Export or import just the allergy list as a shareable JSON file (e.g. for
+  a caregiver or a school) — separate from, and in addition to, the full
+  ZIP backup below; import always merges, never replaces.
 
 **History**
 
 - Every check is stored with the exact text it evaluated, so past results stay
   readable offline even after a term is deleted or a product is corrected.
+- Add a name, a shop and a photo to an entry after the fact — the photo is
+  kept on your device until you remove it, and adding any of them never
+  re-evaluates the stored verdict.
+- Entries are grouped by shop automatically, each group ordered by its own
+  most recent check.
 - Last 500 checks, filterable by verdict.
 
 **Your data**
@@ -105,8 +125,7 @@ and macOS; `google_mlkit_text_recognition` 0.17.1 supports Android and iOS only.
 | Backup | `archive`, `file_picker`, `share_plus` |
 | Utilities | `uuid`, `intl`, `crypto`, `equatable`, `package_info_plus`, `url_launcher` |
 
-Exact version constraints are pinned in `src/pubspec.yaml` once the project is
-scaffolded.
+Exact version constraints are pinned in `src/pubspec.yaml`.
 
 ---
 

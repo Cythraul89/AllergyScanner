@@ -482,9 +482,9 @@ flat active/inactive rendering, unchanged.
 
 ```
 ┌────────────────────────────────────────┐
-│ My allergy terms                  [🔍] │
+│ My allergy terms              [🔍] [⋮] │
 ├────────────────────────────────────────┤
-│  Hazelnut                     [●] [⌃]  │
+│  ● Hazelnut  [High]           [●] [⌃]  │
 │    hazelnut                            │
 │    haselnuss                           │
 │  Milk                         [●] [⌄]  │
@@ -511,7 +511,11 @@ tapping a member or an "Other terms" entry opens *Edit term* (below). The
 separate tap target from the header itself, so collapsing a group never
 navigates anywhere. Collapse state is per-session UI state, not stored;
 every group opens expanded [R7.8]. Search matches a group's label, any of
-its members' text, or an ungrouped term's text.
+its members' text, or an ungrouped term's text. A group's optional color
+appears as the leading dot (`●`) and its optional criticality as a trailing
+chip, both only when set [R7.16]. `[⋮]` opens *Export as JSON* / *Import from
+JSON* [R7.17, §8.6–§8.8] — distinct from Settings' *Local backup*, which
+exports/imports every table, not just groups and terms.
 
 ### Edit term screen
 
@@ -546,6 +550,16 @@ from "Other terms".
 - Swipe-to-delete with an undo snackbar; deleting never touches history
   [R7.9].
 - Duplicate rejected by normalised form, naming the existing entry [R4.1].
+- *Export as JSON* writes `allergy_list_YYYYMMDD_HHmmss.json` (groups + terms
+  only — color/criticality travel with their group, scans/products/settings
+  do not) and opens the platform share sheet; failure shows a snackbar
+  [R7.17, §8.6]. *Import from JSON* opens the system file picker and always
+  merges — an existing group is matched by label and kept as-is beyond
+  gaining any new/attached terms, a term already on the list is skipped —
+  then reports the result as up to three sentences: what was added, what was
+  already on the list, and what could not be read at all (never folded into
+  the "already on your list" count, R8.7a). A refusal reason is shown instead
+  if the file is unreadable or from a newer app version [R7.17, §8.7–§8.8].
 
 ### Group edit screen
 
@@ -560,6 +574,11 @@ not a label-only first step [R4.1e].
 │  ┌──────────────────────────────────┐  │
 │  │ Hazelnut                         │  │
 │  └──────────────────────────────────┘  │
+│                                        │
+│  Color                                 │
+│  (None) (●)(●)(●)(●)(●)(●)(●)(●)(●)(●)(●)│
+│                                        │
+│  Criticality                 High   ▾  │
 │                                        │
 │  Names in this group                   │
 │  [hazelnut ✕]  [haselnuss ✕]           │
@@ -581,6 +600,12 @@ not a label-only first step [R4.1e].
 
 - The label is not matched and not required to be unique — it is only ever
   shown as the group header [§4.1a].
+- `Color` is a fixed 11-swatch palette plus `None` (no new package
+  dependency); `Criticality` is a dropdown of `None`/`Low`/`Medium`/`High`.
+  Both default to whatever the group already has (`None`/unset for a new
+  group) and are written together as one update on `Save` — purely visual
+  tags, read by neither the matcher nor anything else that affects a verdict
+  [R7.16, §5.4].
 - Adding a group (no `groupId` yet) collects names locally in the screen —
   nothing is written until `Save`, so cancelling never leaves an empty group
   behind [R4.1e]. Editing an existing group writes each name immediately, as

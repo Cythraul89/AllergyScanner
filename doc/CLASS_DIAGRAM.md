@@ -5,7 +5,7 @@ signatures of the types that carry the app's logic. It is generated from the
 code by hand: when a signature changes, this file changes in the same commit.
 
 State: matches the source as written and compiled — `flutter analyze
---fatal-infos` and `flutter test` pass as of 2026-09-03 (see CLAUDE.md
+--fatal-infos` and `flutter test` pass as of 2026-10-01 (see CLAUDE.md
 "Current state"), though only on the Flutter/Dart host toolchain; no native
 Android/iOS device build has run yet.
 
@@ -57,6 +57,7 @@ All of `■` and the DAO/read providers live in `lib/core/providers.dart`; the
 ◆ allergenTermActionsProvider  Provider<AllergenTermActions> → allergenTermDao
 ◆ allergenGroupActionsProvider Provider<AllergenGroupActions> → allergenGroupDao  (features/allergies)
 ◆ translationSuggestionsProvider  Provider<TranslationSuggestionService> → translationService  (features/allergies)
+◆ allergyListJsonServiceProvider  Provider<AllergyListJsonService> → appDatabase (for transaction), logService  (features/allergies)
 ◆ historyActionsProvider       Provider<HistoryActions>   → scanDao, scanPhotoService
 ◆ backupActionsProvider        Provider<BackupActions>
      uses: backupService, webdavService, settingsDao, secureStorage, logService
@@ -92,7 +93,7 @@ Rules visible in the graph:
 | `ScanResultScreen` | `scanResultProvider(scanId)`, `scanCapabilitiesProvider`, `allAllergenTermsProvider` (match-group bucketing) | `historyActionsProvider` (delete), `scanPhotoServiceProvider` (thumbnail) |
 | `ProductEditScreen` | `scanCapabilitiesProvider` | `productDaoProvider` (initial load), `productActionsProvider` |
 | `ScanDetailsEditScreen` | — | `scanDaoProvider` (initial load), `scanDetailsActionsProvider`, `scanPhotoServiceProvider` |
-| `AllergiesScreen` | `allAllergenGroupsProvider`, `ungroupedAllergenTermsProvider` | `allergenTermActionsProvider` |
+| `AllergiesScreen` | `allAllergenGroupsProvider`, `ungroupedAllergenTermsProvider` | `allergenTermActionsProvider`, `allergyListJsonServiceProvider` (export/import) |
 | `TermEditScreen` | — | `allergenTermDaoProvider` (initial load), `allergenTermActionsProvider` |
 | `GroupEditScreen` | `allAllergenGroupsProvider`, `ungroupedAllergenTermsProvider`, `currentSettingsProvider` | `allergenGroupDaoProvider` (initial load), `allergenGroupActionsProvider`, `allergenTermActionsProvider`, `translationSuggestionsProvider` |
 | `HistoryScreen` | `scanHistoryProvider`, `historyFilterProvider` | `historyActionsProvider` |
@@ -349,8 +350,10 @@ class BackupService {
 
   /// v2: scans gained name/shop/photoPath, and one raw-bytes archive entry
   /// per attached photo (named after its own photoPath, not base64-in-JSON).
-  /// A v1 archive still imports — those fields are simply absent.
-  static const int backupFormatVersion = 2;
+  /// v3: the allergenGroups list, groupId on each term, and
+  /// certificateFingerprint in the settings (§5.19).
+  /// A v1/v2 archive still imports — those fields are simply absent.
+  static const int backupFormatVersion = 3;
   static String archiveFileName(DateTime at);   // allergy_scanner_YYYYMMDD_HHmmss.zip
 
   Future<List<int>> exportToBytes();            // testable without path_provider
@@ -405,6 +408,53 @@ final class WebdavTransient               extends WebdavOutcome {}
 final class WebdavFailure                 extends WebdavOutcome { final String message; }
 ```
 
+### 2.7a `AllergyListJsonService` — `core/services/allergy_list_json_service.dart`
+
+```dart
+class AllergyListJsonService {
+  /// Takes the database, not the two DAOs, for one reason only: the whole
+  /// merge runs inside AppDatabase.transaction (ARCHITECTURE §5.18). Every
+  /// read and write still goes through a DAO, so no drift row type leaks here.
+  AllergyListJsonService({
+    required AppDatabase database,
+    required LogService log,
+    Uuid uuid = const Uuid(),
+    DateTime Function()? now,
+  });
+
+  /// Independent of schemaVersion and of BackupService.backupFormatVersion.
+  static const int allergyListFormatVersion = 1;
+  static String fileName(DateTime at);  // allergy_list_YYYYMMDD_HHmmss.json
+
+  Future<String> exportToJson();        // groups + terms only, pretty-printed
+  Future<File> exportToFile();
+  /// Always merges, in one transaction: a group is matched by
+  /// trimmed/case-insensitive label and reused (never overwriting its
+  /// color/criticality), a duplicate term (by normalised form, R4.1) is
+  /// skipped — never replaces or deletes anything.
+  Future<AllergyListImportOutcome> importFromFile(File file);
+  Future<AllergyListImportOutcome> importFromJson(String jsonText);  // throws AllergyListFormatException
+}
+
+/// termsSkipped ("already on your list") and termsRejected ("could not be
+/// read") are deliberately separate counts — reporting the second as the
+/// first tells the user an allergen is covered when it was dropped (R8.7a).
+class AllergyListImportOutcome {
+  final int groupsCreated, termsAdded, termsSkipped;
+  final int termsRejected;   // missing/ill-typed term, or outside 1..200 chars
+  final int groupsRejected;  // unusable group header; its terms are still imported, ungrouped
+  bool get hasSkipped;
+  bool get hasRejected;
+}
+
+/// Mirrors BackupFormatException/BackupFormatProblem (§5.17/§5.18) — no
+/// BuildContext here either, so the caller maps `problem` to a string.
+class AllergyListFormatException implements Exception { final AllergyListFormatProblem problem; }
+sealed class AllergyListFormatProblem {}
+final class AllergyListContentInvalid extends AllergyListFormatProblem {}
+final class AllergyListFormatTooNew   extends AllergyListFormatProblem { final int fileFormatVersion; final int appFormatVersion; }
+```
+
 ### 2.8 Domain models — `core/models/`
 
 ```dart
@@ -418,6 +468,8 @@ class AllergenTerm {                  // Equatable, const, copyWith
 
 class AllergenGroup {                 // Equatable, const
   final String id, label;
+  final Color? color;                 // ARGB; null = none, purely visual (R7.16)
+  final GroupCriticality? criticality; // null = none (R7.16)
   final DateTime createdAt, updatedAt;
 }
 
@@ -478,9 +530,10 @@ class AppSettings {
   bool get isSyncConfigured;
 }
 
-enum ScanVerdict    { hit, noMatch, unknown }
-enum ScanInputMode  { barcode, ocr, manualText, manualBarcode }
-enum ProductSource  { openFoodFacts, manual }
+enum ScanVerdict       { hit, noMatch, unknown }
+enum ScanInputMode     { barcode, ocr, manualText, manualBarcode }
+enum ProductSource     { openFoodFacts, manual }
+enum GroupCriticality  { low, medium, high }   // plain relative scale, not clinical
 ```
 
 ### 2.9 DAO surface — `core/database/daos/`
@@ -509,9 +562,20 @@ class AllergenGroupDao {
   /// One left-joined query — every group and its members in one stream
   /// event, same reasoning as ScanDao.watchResult.
   Stream<List<AllergenGroupWithTerms>> watchAllWithTerms();
+  /// One-shot twin: a stream query registers on the database, not on the
+  /// enclosing transaction, so a caller inside transaction(...) — the JSON
+  /// list import — must use this one (ARCHITECTURE §5.18).
+  Future<List<AllergenGroupWithTerms>> getAllWithTerms();
   Future<AllergenGroup?> findById(String id);
   Future<void> insertGroup(AllergenGroup group);
   Future<void> updateLabel({required String id, required String label, required DateTime updatedAt});
+  /// Column-scoped: only color/criticality change. Both `Value`s are always
+  /// present — the one screen that edits them submits the full state.
+  Future<void> setAppearance({
+    required String id, required DateTime updatedAt,
+    Value<Color?> color = const Value.absent(),
+    Value<GroupCriticality?> criticality = const Value.absent(),
+  });
   Future<void> deleteById(String id);   // members survive, ungrouped (FK setNull)
 }
 

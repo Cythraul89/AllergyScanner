@@ -25,6 +25,16 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 /// `if (from < N)` block in one hop); `barcode` is a plain nullable column
 /// here (no FK to a `products` table), since testing that FK is not this
 /// migration's concern.
+///
+/// The v2 seed below additionally needs `allergen_groups` at its pre-v4
+/// shape, for a related but distinct reason: `Migrator.createTable` always
+/// builds a table from its *current* Dart definition (this project hand-
+/// writes migrations rather than using schema-snapshot codegen), so the
+/// `from < 2` step's `createTable(allergenGroups)` already includes the v4
+/// `color`/`criticality` columns. The `from < 4` color/criticality step is
+/// therefore guarded to `from >= 2`, and only runs against a seed that
+/// already has the table without those columns — i.e. a v1 seed never needs
+/// this guard exercised, only a v2 (or v3) one does.
 void main() {
   late String path;
 
@@ -142,6 +152,16 @@ void main() {
         certificate_fingerprint TEXT NULL,
         last_sync_at INTEGER NULL
       );
+      -- A v2 install already has allergen_groups (created by the v1->v2
+      -- step), at its pre-v4 shape — needed so the v2<4 color/criticality
+      -- step below has a table to alter. See the from>=2 guard's comment in
+      -- app_database.dart for why this table cannot simply be omitted here.
+      CREATE TABLE allergen_groups (
+        id TEXT NOT NULL PRIMARY KEY,
+        label TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     ''');
       seed.execute(
         'INSERT INTO settings_entries '
@@ -160,6 +180,60 @@ void main() {
       expect(settings.themeMode.index, 1);
       expect(settings.preferredIngredientsLanguage, 'de');
       expect(settings.appLanguage, isNull);
+    },
+  );
+
+  test('a database from a newer app version is refused, not silently reused', () async {
+    final sqlite3.Database seed = sqlite3.sqlite3.open(path);
+    seed.execute('CREATE TABLE allergen_groups (id TEXT NOT NULL PRIMARY KEY)');
+    // One version above whatever this build supports.
+    seed.execute('PRAGMA user_version = 99');
+    seed.close();
+
+    final AppDatabase database = AppDatabase.forTesting(
+      NativeDatabase(File(path)),
+    );
+    addTearDown(database.close);
+
+    // Without the guard this no-ops, stamps the older version onto the file,
+    // and the *next* run of the newer build cannot open it at all.
+    await expectLater(
+      database.settingsDao.get(),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test(
+    'a v3 database upgrades to v4 with color/criticality defaulting to null',
+    () async {
+      final sqlite3.Database seed = sqlite3.sqlite3.open(path);
+      seed.execute('''
+      CREATE TABLE allergen_groups (
+        id TEXT NOT NULL PRIMARY KEY,
+        label TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    ''');
+      final int ts =
+          DateTime.utc(2026, 1, 2, 3, 4, 5).millisecondsSinceEpoch ~/ 1000;
+      seed.execute(
+        'INSERT INTO allergen_groups (id, label, created_at, updated_at) '
+        "VALUES ('group-1', 'Hazelnut', $ts, $ts)",
+      );
+      seed.execute('PRAGMA user_version = 3');
+      seed.close();
+
+      final AppDatabase database = AppDatabase.forTesting(
+        NativeDatabase(File(path)),
+      );
+      addTearDown(database.close);
+
+      final group = await database.allergenGroupDao.findById('group-1');
+      expect(group, isNotNull);
+      expect(group!.label, 'Hazelnut');
+      expect(group.color, isNull);
+      expect(group.criticality, isNull);
     },
   );
 }

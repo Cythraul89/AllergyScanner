@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart' show Color;
 
 import 'allergen_term.dart';
+import 'enums.dart';
 
 /// A label for a set of allergen terms meaning the same substance in
 /// different languages/spellings (REQUIREMENTS §11 item 1).
@@ -10,15 +12,31 @@ class AllergenGroup extends Equatable {
     required this.label,
     required this.createdAt,
     required this.updatedAt,
+    this.color,
+    this.criticality,
   });
 
   final String id;
   final String label;
+
+  /// `null` when the user has not picked one. Purely visual — see
+  /// `AllergenGroups.color`.
+  final Color? color;
+
+  /// `null` when the user has not tagged a severity (R7.16).
+  final GroupCriticality? criticality;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   @override
-  List<Object?> get props => [id, label, createdAt, updatedAt];
+  List<Object?> get props => [
+    id,
+    label,
+    color,
+    criticality,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// An [AllergenGroup] with its member terms attached. In-memory composite,

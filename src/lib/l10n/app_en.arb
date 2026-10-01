@@ -250,6 +250,42 @@
       "error": {"type": "String"}
     }
   },
+  "allergiesExportAction": "Export as JSON",
+  "allergiesImportAction": "Import from JSON",
+  "allergiesExportFailed": "Export failed: {error}",
+  "@allergiesExportFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "allergiesImportedCount": "{terms, plural, =1{Added 1 term} other{Added {terms} terms}} ({groups, plural, =0{no new groups} =1{1 new group} other{{groups} new groups}}).",
+  "@allergiesImportedCount": {
+    "placeholders": {
+      "terms": {"type": "int"},
+      "groups": {"type": "int"}
+    }
+  },
+  "allergiesImportSkipped": "{count, plural, =1{1 term was already on your list.} other{{count} terms were already on your list.}}",
+  "@allergiesImportSkipped": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "allergiesImportRejected": "{terms, plural, =0{} =1{1 entry could not be read and was not imported.} other{{terms} entries could not be read and were not imported.}}{groups, plural, =0{} =1{ 1 group heading could not be read; its names were imported without a group.} other{ {groups} group headings could not be read; their names were imported without a group.}}",
+  "@allergiesImportRejected": {
+    "placeholders": {
+      "terms": {"type": "int"},
+      "groups": {"type": "int"}
+    }
+  },
+  "allergiesImportFailed": "Import failed: {error}",
+  "@allergiesImportFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "allergiesImportProblemContentInvalid": "That file isn't a valid allergy list export.",
+  "allergiesImportProblemFormatTooNew": "This file was exported by a newer version of the app and can't be imported here.",
 
   "termEditTitle": "Edit term",
   "termFieldLabel": "Term",
@@ -323,6 +359,13 @@
       "error": {"type": "String"}
     }
   },
+  "groupColorLabel": "Color",
+  "groupColorNone": "None",
+  "groupCriticalityLabel": "Criticality",
+  "groupCriticalityNone": "None",
+  "groupCriticalityLow": "Low",
+  "groupCriticalityMedium": "Medium",
+  "groupCriticalityHigh": "High",
 
   "aboutTitle": "About",
   "aboutVersionLabel": "Version {version}",
@@ -349,13 +392,13 @@
   "privacyNoAccountHeading": "No account, no telemetry",
   "privacyNoAccountText": "AllergyScanner has no accounts and no login. It contains no analytics, no crash reporting service, no advertising and no tracking identifiers.",
   "privacyStoredHeading": "Stored on this device",
-  "privacyStoredText": "Your allergy terms, the products you scanned, your scan history (the last 500 checks) and your settings, in a database inside the app's private storage. A diagnostic log file, viewable under Settings → App logs. If you configure sync, the WebDAV password in the platform key store — never in the database, the log or a backup archive.",
+  "privacyStoredText": "Your allergy terms and groups, the products you scanned, your scan history (the last 500 checks) and your settings, in a database inside the app's private storage. Any photo you attached to a history entry, in the app's private storage, until you remove it. A diagnostic log file, viewable under Settings → App logs. If you configure sync, the WebDAV password in the platform key store — never in the database, the log or a backup archive.",
   "privacyLeavesHeading": "What leaves the device",
-  "privacyLeavesText": "•  The barcode digits, sent to Open Food Facts — only for a product that is not already stored locally, and only while \"Look up products online\" is on.\n•  A backup archive, sent to your own Nextcloud/WebDAV server — only if you configured sync.\n•  Anything you explicitly share.\n\nYour allergy terms and your history are never sent to Open Food Facts or to any other third party.",
+  "privacyLeavesText": "•  The barcode digits, sent to Open Food Facts — only for a product that is not already stored locally, and only while \"Look up products online\" is on.\n•  A single allergen group name you type, sent to the MyMemory translation service when you tap \"Suggest translations\" — only then, and only while \"Look up products online\" is on.\n•  A backup archive, sent to your own Nextcloud/WebDAV server — only if you configured sync.\n•  Anything you explicitly share, including an allergy-list JSON file you export, which contains your full list of groups and terms.\n\nApart from those, your allergy terms and your history stay on this device. Nothing is ever sent anywhere automatically, and your scan history is never sent to any third party.",
   "privacyCameraHeading": "Camera and photos",
-  "privacyCameraText": "Barcode detection and text recognition both run on this device. No image is uploaded. A photo taken for text recognition is written to a temporary file, processed, and deleted immediately afterwards; only the recognised text — which you can edit — is stored, as part of the scan history.",
+  "privacyCameraText": "Barcode detection and text recognition both run on this device. No image is ever uploaded. A photo taken for text recognition is written to a temporary file, processed, and deleted immediately afterwards; only the recognised text — which you can edit — is stored, as part of the scan history. Separately, a photo you choose to attach to a history entry is stored in the app's private storage until you remove it, and is included in a backup archive.",
   "privacyControlHeading": "Your control",
-  "privacyControlText": "Delete a single check, clear the whole history, delete any term, export everything as a ZIP archive, switch online lookup off entirely, or uninstall the app to remove all of it.",
+  "privacyControlText": "Delete a single check, clear the whole history, delete any term, remove a photo you attached to a history entry without deleting the check itself, export everything as a ZIP archive, export just your allergy list as JSON, switch online lookup off entirely, or uninstall the app to remove all of it.",
 
   "logsReloadTooltip": "Reload",
   "logsShareTooltip": "Share",
@@ -438,6 +481,12 @@
   "syncUploadSuccess": "Backup uploaded.",
   "syncCertNotTrusted": "The server certificate is not trusted.",
   "syncStoredCredsRejected": "The server rejected the stored credentials.",
+  "syncRestoreFailed": "The restore failed: {error}",
+  "@syncRestoreFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
   "syncRestoredNoDetail": "Restored.",
   "syncRestoredWithSkipped": "Restored {count} rows, skipped {skipped}.",
   "@syncRestoredWithSkipped": {

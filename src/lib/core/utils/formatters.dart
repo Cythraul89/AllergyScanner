@@ -72,4 +72,18 @@ class Formatters {
 
   static String matchCountLabel(AppLocalizations l10n, int count) =>
       l10n.matchCount(count);
+
+  static String criticalityLabel(
+    AppLocalizations l10n,
+    GroupCriticality criticality,
+  ) {
+    switch (criticality) {
+      case GroupCriticality.low:
+        return l10n.groupCriticalityLow;
+      case GroupCriticality.medium:
+        return l10n.groupCriticalityMedium;
+      case GroupCriticality.high:
+        return l10n.groupCriticalityHigh;
+    }
+  }
 }

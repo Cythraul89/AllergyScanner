@@ -82,11 +82,11 @@ class TranslationService {
 
       final int status = response.statusCode ?? 0;
       if (status == 429 || status >= 500) {
-        _log.warn('MyMemory returned $status for "$text"');
+        _log.warn('MyMemory returned $status ($sourceLanguage>$targetLanguage)');
         return const TranslationTransient();
       }
       if (status < 200 || status >= 300) {
-        _log.warn('MyMemory returned $status for "$text"');
+        _log.warn('MyMemory returned $status ($sourceLanguage>$targetLanguage)');
         return TranslationFailure('Server returned status $status.');
       }
 
@@ -116,14 +116,21 @@ class TranslationService {
         quality: _asDouble(responseData['match']),
       );
     } on DioException catch (exception) {
-      return _mapDioError(text, exception);
+      return _mapDioError('$sourceLanguage>$targetLanguage', exception);
     } on Object catch (cause, stackTrace) {
-      _log.error('MyMemory translation failed for "$text"', cause, stackTrace);
+      _log.error(
+        'MyMemory translation failed ($sourceLanguage>$targetLanguage)',
+        cause,
+        stackTrace,
+      );
       return TranslationFailure('Translation failed: $cause');
     }
   }
 
-  TranslationResult _mapDioError(String text, DioException exception) {
+  /// [pair] is the language pair, never the user's term: the log is
+  /// shareable (Settings -> App logs), and an allergen name is exactly the
+  /// kind of personal data PRIVACY.md promises stays on the device.
+  TranslationResult _mapDioError(String pair, DioException exception) {
     final int? status = exception.response?.statusCode;
     if (status == 429 || (status != null && status >= 500)) {
       return const TranslationTransient();
@@ -135,7 +142,7 @@ class TranslationService {
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.transformTimeout:
       case DioExceptionType.connectionError:
-        _log.warn('MyMemory unreachable for "$text": ${exception.type}');
+        _log.warn('MyMemory unreachable ($pair): ${exception.type}');
         return const TranslationTransient();
       case DioExceptionType.cancel:
         return const TranslationFailure('Translation cancelled.');
@@ -147,7 +154,7 @@ class TranslationService {
         if (exception.error is SocketException) {
           return const TranslationTransient();
         }
-        _log.error('MyMemory translation failed for "$text"', exception);
+        _log.error('MyMemory translation failed ($pair)', exception);
         return TranslationFailure(exception.message ?? 'Translation failed.');
     }
   }

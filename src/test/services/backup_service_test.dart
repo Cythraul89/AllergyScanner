@@ -3,13 +3,16 @@ import 'dart:io';
 
 import 'package:allergy_scanner/core/database/app_database.dart';
 import 'package:allergy_scanner/core/models/allergen_term.dart';
+import 'package:allergy_scanner/core/models/allergen_group.dart';
 import 'package:allergy_scanner/core/models/app_settings.dart';
+import 'package:allergy_scanner/core/models/enums.dart';
 import 'package:allergy_scanner/core/models/scan.dart';
 import 'package:allergy_scanner/core/services/backup_service.dart';
 import 'package:allergy_scanner/core/services/log_service.dart';
 import 'package:allergy_scanner/core/services/scan_photo_service.dart';
 import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path_helper;
 
@@ -67,6 +70,106 @@ void main() {
       username: 'me',
     );
   }
+
+
+  Future<void> seedGroups(AppDatabase database) async {
+    await database.allergenGroupDao.insertGroup(
+      AllergenGroup(
+        id: 'g1',
+        label: 'Hazelnut',
+        color: const Color(0xFFFF0000),
+        criticality: GroupCriticality.high,
+        createdAt: testTimestamp,
+        updatedAt: testTimestamp,
+      ),
+    );
+    await database.allergenTermDao.insertTerm(
+      buildTerm(
+        id: 'term-1',
+        term: 'Hazelnut',
+        normalizedTerm: 'hazelnut',
+        groupId: 'g1',
+      ),
+    );
+    await database.allergenTermDao.insertTerm(
+      buildTerm(
+        id: 'term-2',
+        term: 'Haselnuss',
+        normalizedTerm: 'haselnuss',
+        groupId: 'g1',
+      ),
+    );
+  }
+
+  // ── Regression tests for the restore defects found in review ────────────
+
+  test('allergen groups and group membership survive a round trip', () async {
+    await seedGroups(source);
+    final List<int> bytes = await serviceFor(source).exportToBytes();
+
+    final AppDatabase target = openTestDatabase();
+    addTearDown(target.close);
+    await serviceFor(target).importFromBytes(bytes);
+
+    final List<AllergenGroupWithTerms> groups = await target.allergenGroupDao
+        .getAllWithTerms();
+    expect(groups, hasLength(1));
+    expect(groups.single.group.label, 'Hazelnut');
+    expect(groups.single.group.color?.toARGB32(), 0xFFFF0000);
+    expect(groups.single.group.criticality, GroupCriticality.high);
+    expect(
+      groups.single.terms.map((AllergenTerm t) => t.term),
+      containsAll(<String>['Hazelnut', 'Haselnuss']),
+    );
+  });
+
+  test(
+    'restoring onto a device that already has the same term by a different id',
+    () async {
+      await seed(source);
+      final List<int> bytes = await serviceFor(source).exportToBytes();
+
+      // The same substance, entered independently on the target device — the
+      // normal case, and the one that used to roll the whole restore back on
+      // allergen_terms' UNIQUE(normalized_term).
+      final AppDatabase target = openTestDatabase();
+      addTearDown(target.close);
+      await target.allergenTermDao.insertTerm(
+        buildTerm(id: 'local-uuid', term: 'hazelnut', normalizedTerm: 'hazelnut'),
+      );
+
+      final ImportOutcome outcome = await serviceFor(
+        target,
+      ).importFromBytes(bytes);
+
+      expect(outcome.imported, greaterThan(0));
+      final List<AllergenTerm> terms = await target.allergenTermDao.getActive();
+      expect(terms, hasLength(1), reason: 'archive wins, no duplicate row');
+      expect(terms.single.id, 'term-1');
+      expect(terms.single.term, 'Hazelnut');
+    },
+  );
+
+  test('a restore keeps the pinned certificate and the acknowledged disclaimer',
+      () async {
+    await seed(source);
+    await source.settingsDao.setWebdav(
+      baseUrl: 'https://cloud.example.org/dav/',
+      username: 'me',
+      certificateFingerprint: 'AA:BB:CC',
+    );
+    await source.settingsDao.acknowledgeDisclaimer(testTimestamp);
+    final List<int> bytes = await serviceFor(source).exportToBytes();
+
+    final AppDatabase target = openTestDatabase();
+    addTearDown(target.close);
+    await serviceFor(target).importFromBytes(bytes);
+
+    final AppSettings restored = await target.settingsDao.get();
+    expect(restored.certificateFingerprint, 'AA:BB:CC');
+    // Previously null after every restore, so the disclaimer gate reappeared.
+    expect(restored.disclaimerAcknowledgedAt, isNotNull);
+  });
 
   test('the archive contains a manifest and the data file', () async {
     await seed(source);

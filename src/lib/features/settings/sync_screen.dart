@@ -276,9 +276,18 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       _busy = true;
       _status = null;
     });
-    final WebdavOutcome outcome = await ref
-        .read(backupActionsProvider)
-        .restoreLatest();
+
+    // restoreLatest only maps BackupFormatException; anything else — a
+    // database error mid-restore, a disk failure — used to escape as an
+    // unhandled async error and leave _busy true, i.e. a spinner forever with
+    // nothing told to the user.
+    final WebdavOutcome outcome;
+    try {
+      outcome = await ref.read(backupActionsProvider).restoreLatest();
+    } on Object catch (cause) {
+      _report(l10n.syncRestoreFailed(cause.toString()));
+      return;
+    }
 
     if (outcome is WebdavSuccess<ImportOutcome>) {
       final ImportOutcome? result = outcome.value;

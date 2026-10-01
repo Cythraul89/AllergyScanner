@@ -3,8 +3,9 @@
 This document describes what AllergyScanner stores and what leaves the device.
 The in-app privacy screen (Settings → Privacy) mirrors it.
 
-Last updated: 2026-08-27. Applies to the specification; it must be re-checked
-against the implementation before the first release.
+Last updated: 2026-10-01, re-checked against the implementation. It must be
+re-checked again before the first release, once the app has run on a real
+device.
 
 ---
 
@@ -36,19 +37,22 @@ log file or into a backup archive.
 
 In a log file inside the app's private storage: diagnostic messages
 (errors, network failures, backup results). You can view, share and clear it
-under Settings → App logs. It contains no ingredient text and no credentials.
+under Settings → App logs. Because it is shareable, it deliberately contains
+none of your own text: no ingredient text, no allergy terms or group names,
+and no credentials.
 
 Uninstalling the app removes all of it.
 
 ## 3. What leaves the device
 
-Exactly four things, all of them under your control:
+Exactly five things, all of them under your control:
 
 | What | Sent to | When | Contains |
 |---|---|---|---|
 | The barcode digits | Open Food Facts (`world.openfoodfacts.org`) | Only when you scan or enter a barcode that is not already cached locally, and only while *Look up products online* is enabled | The barcode, plus the app's mandatory `User-Agent` (app name, version, contact address). No device identifier, no allergy terms, no history |
 | A name you type when adding to an allergen group | MyMemory (`api.mymemory.translated.net`) | Only when you tap *Suggest translations*, and only while *Look up products online* is enabled | The name you typed, plus an optional contact address. Nothing else about your allergy list, history or device |
-| A backup archive | Your own Nextcloud/WebDAV server | Only when you have configured sync, and only on app start or when you trigger it | Your allergy terms, products and scan history — including any photo you attached to a history entry. No passwords |
+| A backup archive | Your own Nextcloud/WebDAV server | Only when you have configured sync, and only on app start or when you trigger it | Your allergy terms and the groups they are organised into, the products you scanned and your scan history — including any photo you attached to a history entry. No passwords |
+| An allergy-list JSON file | Wherever you send it | Only when you use *Export as JSON* on the Allergies screen | Your full list of allergen groups and terms — including each group's colour and criticality tag, and each term's note. No history, no products, no settings, no passwords |
 | A shared file or text | Wherever you send it | Only when you use *Share* | The exported archive, log file or result text you chose to share |
 
 Switching *Look up products online* off in Settings stops all HTTP requests to
@@ -75,9 +79,20 @@ stored products, and translation suggestions are unavailable.
 
 ## 5. Your allergy terms
 
-Your allergy terms and your scan history never leave the device except inside a
-backup archive you export or sync to your own server. They are never sent to
-Open Food Facts or to any other third party.
+Nothing is ever sent anywhere automatically. Your allergy terms leave the
+device only in these three cases, each of which you trigger yourself:
+
+- inside a backup archive you export or sync to your own server (§3);
+- inside an allergy-list JSON file you export and share (§3) — this one
+  carries your full list of groups and terms;
+- a **single** group name you type, when you tap *Suggest translations*, sent
+  to MyMemory and nowhere else (§3, §6).
+
+Your scan history leaves the device only inside a backup archive you export or
+sync, or in a single result text you choose to share (§3). It is never sent to
+Open Food Facts, to MyMemory, or to any other third party, and neither your
+terms nor your history are ever sent for analytics, advertising or profiling —
+there is none of that in this app (§1).
 
 ## 6. Third-party services
 
@@ -103,7 +118,8 @@ anyone.
   any time.
 - Remove a photo you attached to a history entry independently of deleting
   the whole scan.
-- Export everything as a ZIP archive, or delete the app to remove all data.
+- Export everything as a ZIP archive, or export just your allergy list as a
+  JSON file, or delete the app to remove all data.
 - Disable online lookup entirely, which also disables translation
   suggestions.
 - Remove the sync configuration, which also deletes the stored password.

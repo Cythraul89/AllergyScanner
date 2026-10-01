@@ -7,15 +7,25 @@
 > **Branch policy**: develop on `feature/**`, open PRs against `develop`. Never
 > push to `main` without explicit instruction.
 
-> **Current state**: as of 2026-09-03, `flutter create`, `pub get`,
-> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (172
+> **Current state**: as of 2026-10-01, `flutter create`, `pub get`,
+> `build_runner`, `flutter analyze --fatal-infos` and `flutter test` (193
 > tests) all pass on Flutter 3.47.1 stable / Dart 3.13.1, Linux host — see
 > "Platform traps" below for what broke on the first run and the fixes
 > applied. `go_router` 17 and `archive` 4 are exercised by the widget and
-> backup tests respectively. `schemaVersion` is now 3 (allergen groups,
-> `scans.name`/`shop`/`photoPath`, `settings.appLanguage`) with two real
-> `onUpgrade` steps and migration tests. The app's UI is now localized
-> (English/German, `flutter gen-l10n`) — see "Localization" below.
+> backup tests respectively. `schemaVersion` is now 4 (allergen groups,
+> `scans.name`/`shop`/`photoPath`, `settings.appLanguage`,
+> `allergen_groups.color`/`criticality`) with three real `onUpgrade` steps
+> and migration tests. The app's UI is now localized (English/German,
+> `flutter gen-l10n`) — see "Localization" below. Allergen groups can now
+> carry an optional color/criticality tag (REQUIREMENTS R7.16,
+> ARCHITECTURE §5.18), and the allergy list (groups + terms only) can be
+> exported/imported as a standalone, merge-only JSON file independent of
+> the full ZIP backup (R7.17, §8.6–§8.8) — see "Platform traps" below for
+> the migration pitfall this uncovered. `backupFormatVersion` is now 3: the
+> full ZIP backup carries allergen groups and each term's `groupId`, so a
+> restore no longer flattens every group (R8.9, ARCHITECTURE §5.19), and
+> `onUpgrade` now refuses to open a database newer than the build (R4.13)
+> instead of silently stamping the older version onto it.
 > **Still unverified**: any real Android or iOS device/emulator build (no
 > native toolchain has run against this project yet), and therefore
 > `mobile_scanner`, `drift_flutter`'s isolate behaviour, and `share_plus`,
@@ -71,10 +81,10 @@ every CI job regenerates it. Never edit it by hand. Any change under
 the generated `.dart` files.
 
 Platform folders (`android/`, `ios/`) are **not committed** either. CI scaffolds
-each one with `flutter create --platforms=<p> .`; every native change —
-permissions, `Info.plist` usage descriptions, deployment targets, `minSdk` —
-lives as a patch step in `.github/workflows/build.yml`. Adding one locally and
-committing it is a bug. `macos/`, `linux/`, `windows/` and `web/` are
+each one with `flutter create --platforms=<p> --org <application-id-prefix> .`;
+every native change — permissions, `Info.plist` usage descriptions, deployment
+targets, `compileSdk` — lives as a patch step in
+`.github/workflows/build.yml`. Adding one locally and committing it is a bug. `macos/`, `linux/`, `windows/` and `web/` are
 git-ignored too, so an accidental `flutter create` cannot add an unsupported
 platform to the repository.
 
@@ -96,7 +106,7 @@ src/
 │   │   ├── constants.dart           contact/limits, cache TTL, history cap, MyMemory base URL
 │   │   ├── providers.dart           overridden singletons, DAO + read providers, appLocaleProvider
 │   │   ├── database/
-│   │   │   ├── app_database.dart     @DriftDatabase, schemaVersion (3), onUpgrade
+│   │   │   ├── app_database.dart     @DriftDatabase, schemaVersion (4), onUpgrade
 │   │   │   ├── tables/               allergen_terms, allergen_groups, products,
 │   │   │   │                        scans, scan_matches, settings
 │   │   │   └── daos/                 one per aggregate
@@ -107,7 +117,8 @@ src/
 │   │   │   ├── ingredient_marker_detector.dart  localized "Ingredients:" gate
 │   │   │   └── spelling_variant.dart German ASCII-spelling match fallback (öäüß)
 │   │   ├── services/                 log, open_food_facts, translation (MyMemory),
-│   │   │                             text_recognition, backup, scan_photo, webdav
+│   │   │                             text_recognition, backup, scan_photo, webdav,
+│   │   │                             allergy_list_json_service (groups+terms JSON)
 │   │   ├── utils/                    scan_capabilities, formatters (AppLocalizations-aware), app_version
 │   │   └── widgets/                  error_view, empty_view, verdict_banner, highlighted_text
 │   ├── features/
@@ -355,6 +366,46 @@ afterwards):
   `Formatters.dateTime` works immediately once `Intl.defaultLocale` is set to
   `'de'` — no separate initialization call was needed.
 
+Confirmed, with the fix that worked — adding allergen-group color/criticality
+and the allergy-list JSON export/import, 2026-10-01 (`build_runner`,
+`analyze`, `test` all green afterwards):
+
+- **`Migrator.createTable` builds a table from its *current* Dart
+  definition, not a per-version snapshot** — adding `allergen_groups.color`/
+  `criticality` (`schemaVersion` 3 → 4) and writing the obvious
+  `if (from < 4) { addColumn(color); addColumn(criticality); }` block failed
+  a from-v1 upgrade with "duplicate column: color". Cause: this project
+  hand-writes `onUpgrade` blocks instead of using `drift_dev`'s
+  schema-snapshot tooling (no `build.yaml` scaffold for it, see
+  `migration_test.dart`'s own doc comment), so the **existing**
+  `if (from < 2)` block's `migrator.createTable(allergenGroups)` — written
+  for the v1→v2 migration, long before these columns existed — builds from
+  today's table definition and therefore already creates them. A from-v1
+  upgrade runs both blocks in the same `onUpgrade` call, so the later block
+  then tries to add a column that already exists. Fix: guard the new step to
+  `if (from >= 2 && from < 4)`, so it only runs for a v2 or v3 database that
+  genuinely lacks the columns, never for one freshly created by the
+  `from < 2` step in the same upgrade. Confirmed empirically via
+  `migration_test.dart`'s hand-built v2-shaped seed, not assumed. Any future
+  column added to a table that an earlier `if (from < N)` block also
+  `createTable`s needs this same check — "does an earlier step in this same
+  `onUpgrade` already include it?" — not just "add a migration block".
+- **`insertOnConflictUpdate` only resolves the *primary key*, not a second
+  `UNIQUE` index** — `allergen_terms` has `UNIQUE(normalized_term)` besides
+  its uuid primary key, so restoring a backup onto a device that already
+  carries the same term under a *different* uuid threw
+  `SqliteException(2067): UNIQUE constraint failed` out of the upsert and
+  rolled the entire restore back. The upsert looked safe because every
+  single-device test restores an archive the same device wrote, where the
+  ids match and only the primary key is ever hit — the bug needs two
+  devices, i.e. exactly the case a backup exists for. Fix: look the clashing
+  row up by `normalizedTerm` and delete it before inserting the archive's
+  (history is unaffected — `scan_matches.allergenTermId` is `setNull` and the
+  match keeps its `termSnapshot`, R4.7). The general rule: before upserting
+  a restored/imported row, check the table for *every* uniqueness constraint,
+  not just the one drift's `onConflict` defaults to — and write the test with
+  two differently-seeded databases, not a round trip through one.
+
 Expected but **still not yet verified** — no native Android/iOS build has
 succeeded yet, only `flutter create`'s scaffolding plus the pure-Dart/Flutter-
 host verification loop above. Check these first when a real device/CI build
@@ -362,13 +413,17 @@ fails:
 
 - **iOS deployment target** — `google_mlkit_text_recognition` 0.17.1 documents a
   minimum deployment target of 15.5 and Xcode ≥ 15.3. The Flutter template
-  generates a lower target, so `build.yml` patches both the `Podfile` and
-  `project.pbxproj`. If `pod install` fails, this is the first thing to check.
-- **Android `minSdk`** — ML Kit documents `minSdkVersion 21`; `build.yml` pins
-  it explicitly rather than relying on the Flutter default, so a template change
-  cannot lower it silently. The patch matches the literal
-  `minSdk = flutter.minSdkVersion`; if the template's wording changes, the
-  replacement silently does nothing.
+  generates a lower target, so `build.yml` patches `project.pbxproj`, and the
+  `Podfile` too *if one exists* — current Flutter resolves plugins through SPM
+  and may not generate one, so that patch is skipped rather than assumed. The
+  `project.pbxproj` patch fails the job loudly if its regex matches nothing.
+  If `pod install` fails, this is the first thing to check.
+- **Android `minSdk` is deliberately not patched** — `build.yml` used to pin
+  `minSdk = 21` (ML Kit's documented floor), which *lowered* it below
+  Flutter's own `flutter.minSdkVersion` of 24 and below
+  `flutter_secure_storage`'s 24. The pin is gone; the Flutter default already
+  satisfies every plugin here. Do not reintroduce it — check the plugins'
+  floors against `flutter.minSdkVersion` instead.
 - **Isolate behaviour of `driftDatabase`** — `drift_flutter` documents that it
   opens on the calling isolate unless `shareAcrossIsolates: true`. If a release
   build crashes on the first query with a missing native library, this is the
@@ -394,14 +449,15 @@ fails:
 | `test/calculators/ingredient_marker_detector_test.dart` | The four localized markers, case-insensitivity, optional space before the colon, earliest-marker-wins, section boundary, and accepted limitations (dropped colon, colon-as-semicolon, marker split across a line break, unsupported language) as pinned expectations |
 | `test/database/test_database.dart` | In-memory factory plus row builders shared by the DAO tests |
 | `test/database/allergen_term_dao_test.dart` | Insert/read, normalised-form lookup, the unique constraint, active filtering, partial writes, `setGroup`, `watchUngrouped`, `setActiveForGroup` cascading to every member and leaving other terms alone |
-| `test/database/allergen_group_dao_test.dart` | Insert/find/rename, `watchAllWithTerms` bucketing, deleting a group ungroups (never deletes) its members, `AllergenGroupWithTerms.isActive` (empty/all-active/mixed) |
+| `test/database/allergen_group_dao_test.dart` | Insert/find/rename, `watchAllWithTerms` bucketing, deleting a group ungroups (never deletes) its members, `AllergenGroupWithTerms.isActive` (empty/all-active/mixed), color/criticality round trip and `setAppearance` clearing both |
 | `test/database/product_dao_test.dart` | Tag round trip, remote overwrite, manual override winning, staleness |
 | `test/database/scan_dao_test.dart` | Scan + matches in one write, `setNull` on term and product deletion, `cascade` on scan deletion, re-evaluation replacing matches, pruning, filtering, `updateDetails` column-scoping, pruned/deleted rows' photo paths returned |
 | `test/database/settings_dao_test.dart` | Defaults without a row, `ensureDefaults`, column-scoped writes, no password column, `appLanguage` defaulting to `null` and reverting to `null` |
-| `test/database/migration_test.dart` | The v1→v2 `onUpgrade` step (allergen_groups + scans columns) and the v2→v3 step (`settings.appLanguage`) against hand-built databases |
+| `test/database/migration_test.dart` | The v1→v2 `onUpgrade` step (allergen_groups + scans columns), the v2→v3 step (`settings.appLanguage`) and the v3→v4 step (`allergen_groups.color`/`criticality`, including the `from >= 2` guard against a v2-shaped seed) against hand-built databases, plus a newer-than-the-build database being refused with a `StateError` instead of silently downgraded |
 | `test/services/open_food_facts_service_test.dart` | Loopback `HttpServer`: mapping, language preference, 404, v3 and v2 not-found shapes, 429, 500, unexpected payload, unreachable server, throttling |
 | `test/services/translation_service_test.dart` | Loopback `HttpServer`: MyMemory success, exhausted-quota-as-transient, empty translation as not-found, 429/500, unexpected payload, unreachable server |
-| `test/services/backup_service_test.dart` | In-memory round trip (including `appLanguage`), no credential in the archive, skip counting, newer-schema/newer-format refusal, bad archives, photo entries in/out, v1-archive backward compatibility |
+| `test/services/backup_service_test.dart` | In-memory round trip (including `appLanguage`), no credential in the archive, skip counting, newer-schema/newer-format refusal, bad archives, photo entries in/out, v1-archive backward compatibility, allergen groups + `groupId` surviving a round trip, restoring onto a device that already holds the same term under a different id, and a restore keeping the pinned certificate and the acknowledged disclaimer |
+| `test/services/allergy_list_json_service_test.dart` | Group (with color/criticality) + ungrouped term round trip, duplicate skipped, unrelated local data untouched, a grouped term adopting the group's active state, a too-short term counted as rejected rather than as a duplicate, ill-typed fields rejected rather than thrown with nothing half-written, an all-duplicate group leaving no empty group, a genuinely empty group still round-tripping, and the three refusals (not JSON, neither list present, newer format version) |
 | `test/services/scan_photo_service_test.dart` | Attach/replace/delete/restore against a real temp directory, resolve keyed by basename |
 | `test/widgets/highlighted_text_test.dart` | Pure `resolveHighlightSegments`: no ranges, single range, boundary clamping, unsorted input, overlapping ranges dropped |
 | `test/features/scan_actions_test.dart` | `reevaluate` carries name/shop/photoPath forward — the regression test for the bug the history-details feature found |
@@ -427,7 +483,7 @@ Three workflows; `build.yml` is the only file containing build steps.
 
 | Workflow | Trigger | Contents |
 |---|---|---|
-| `build.yml` | `workflow_call` | 2 platforms × (debug, release) + SBOM; inputs `version`, `retention-days` |
+| `build.yml` | `workflow_call` | 2 platforms × (debug, release) + SBOM; inputs `version`, `retention-days`, `application-id-prefix` (default `com.allergyscanner`, passed to `flutter create --org` — the template's `com.example` is store-rejected and immutable after first publish) |
 | `ci.yml` | push `main`/`develop`/`feature/**`, PRs | analyse + test → `build.yml` with `<pubspec version>-dev` |
 | `release.yml` | tag `v*.*.*` | analyse + test → `build.yml` with the tag version → GitHub Release |
 

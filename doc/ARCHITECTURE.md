@@ -42,14 +42,18 @@ Not used, deliberately:
   divergent code path.
 
 Every version in `src/pubspec.yaml` was read from pub.dev on 2026-08-20 and
-none has been resolved by `flutter pub get` yet. Two constraints follow from
-the plugins rather than from the house style:
+has since been resolved by `flutter pub get` and compiled on the Flutter/Dart
+host toolchain; only the native Android/iOS plugin behaviour is still
+unverified on a device. Two constraints follow from the plugins rather than
+from the house style:
 
 - `mobile_scanner` 7.4.0 requires `sdk: ^3.7.0` and Flutter ≥ 3.29, so the
   house-style `>=3.3.0 <4.0.0` is not satisfiable.
 - `google_mlkit_text_recognition` 0.17.1 requires `minSdkVersion 21` and iOS
-  deployment target 15.5; both are patched into the generated platform folders
-  by `build.yml`.
+  deployment target 15.5. Only the iOS target is patched into the generated
+  platform folders by `build.yml`; `minSdk` deliberately is not, because the
+  pinned Flutter's own `flutter.minSdkVersion` (24) is already above every
+  plugin's floor here — pinning 21 *lowered* it and broke the build.
 - `flutter_riverpod` is pinned to `^2.6.1` per the house style although 3.4.2
   exists. Riverpod 3 moves `StateProvider` to a legacy import, so migrating is
   a deliberate change, not a version bump.
@@ -81,7 +85,7 @@ src/lib/
 │   │   ├── product.dart
 │   │   ├── scan.dart               Scan + ScanMatch + ScanResult
 │   │   ├── scan_input.dart         sealed: BarcodeInput | TextInput
-│   │   ├── enums.dart              ScanVerdict, ScanInputMode, ProductSource
+│   │   ├── enums.dart              ScanVerdict, ScanInputMode, ProductSource, GroupCriticality
 │   │   └── app_settings.dart
 │   ├── calculators/
 │   │   ├── text_normalizer.dart    the single normalisation function (§5.1)
@@ -95,7 +99,8 @@ src/lib/
 │   │   ├── text_recognition_service.dart  ML Kit behind an interface
 │   │   ├── backup_service.dart     ZIP export/import (bytes and file)
 │   │   ├── scan_photo_service.dart shop/name/photo history attachments (§5.16)
-│   │   └── webdav_service.dart     Nextcloud sync + certificate pinning
+│   │   ├── webdav_service.dart     Nextcloud sync + certificate pinning
+│   │   └── allergy_list_json_service.dart  groups+terms JSON export/import (§5.18)
 │   ├── utils/
 │   │   ├── scan_capabilities.dart  the only place that asks about the platform
 │   │   ├── formatters.dart         dates (Intl.defaultLocale), verdict wording (AppLocalizations, §5.17)
@@ -141,9 +146,10 @@ settings (single row, id = 1)
 - `schemaVersion` was 1 through the first Android/iOS-scaffold compile
   (2026-08-20); 2 added §5.15/§5.16's `allergen_groups` table and
   `scans.name`/`shop`/`photoPath` — the app's first real `onUpgrade` step,
-  purely additive (`createTable`/`addColumn`, no data transform). It is now
-  3 (§5.17's `settings.appLanguage`, likewise additive). Every further
-  change bumps it again and adds another `if (from < N)` step.
+  purely additive (`createTable`/`addColumn`, no data transform). It was 3
+  for §5.17's `settings.appLanguage` (likewise additive), and is now 4
+  (§5.18's `allergen_groups.color`/`criticality`). Every further change
+  bumps it again and adds another `if (from < N)` step.
 - Foreign keys are chosen so history stays readable: `scan_matches.scanId`
   cascades, `scan_matches.allergenTermId` and `scans.barcode` are nullable and
   `setNull` (§5.5).
@@ -524,11 +530,11 @@ directory in tests, exactly like `LogService`.
 The backup archive's photo entries are named after their own `photoPath` and
 carry raw bytes, not base64-in-JSON — avoiding both the ~33% size inflation
 and the JSON-escaping overhead of round-tripping binary data through the
-existing single-`Map` `data.json` payload. `backupFormatVersion` (2, distinct
-from `schemaVersion`) tracks this archive-layout change; a v1 archive (no
-photo entries, no `name`/`shop`/`photoPath` keys) still imports correctly,
-since the existing `Map` access pattern already reads an absent key as
-`null`.
+existing single-`Map` `data.json` payload. `backupFormatVersion` (distinct
+from `schemaVersion`) tracks this archive-layout change as its version 2; a
+v1 archive (no photo entries, no `name`/`shop`/`photoPath` keys) still imports
+correctly, since the existing `Map` access pattern already reads an absent key
+as `null`. It is now at 3 — see §5.19.
 
 *Rejected:* persisting the OCR capture photo too, or blurring N10 (capture,
 never stored) and N10a (attached, opt-in, stored until removed) into one
@@ -605,6 +611,170 @@ note): one is what language the app's *own UI* is shown in, the other is
 which of a multi-language Open Food Facts product's ingredient texts is
 read, and conflating them would make it impossible to run the app in German
 while still preferring English ingredient text (or vice versa).
+
+### 5.18 Allergy-list JSON export/import is a separate, merge-only feature; a migration trap in the color/criticality columns
+
+`AllergenGroups` gained two nullable columns, `color` (ARGB `int`) and
+`criticality` (`intEnum<GroupCriticality>()`), purely cosmetic tags shown on
+the Allergies screen (REQUIREMENTS R7.16) and never read by `AllergenMatcher`
+— the same "additive, nullable overlay" shape as §5.15's `groupId`.
+`GroupCriticality { low, medium, high }` is deliberately a plain relative
+scale, not clinical wording ("anaphylaxis risk" or similar) — consistent with
+this app never making a safety/medical assessment (§5.6/REQUIREMENTS §5.6).
+
+*New service, not a `BackupService` extension:* `AllergyListJsonService`
+(`core/services/allergy_list_json_service.dart`) exports/imports only
+`allergen_groups` + `allergen_terms` as a standalone JSON file, under its own
+`allergyListFormatVersion` (currently 1) — independent of both
+`schemaVersion` and `BackupService.backupFormatVersion`. *Why a second
+feature instead of folding this into the existing ZIP backup:* the ZIP
+backup is a byte-faithful, single-device snapshot of everything (including
+internal ids, meant to be restored onto the same or a replacement
+installation); this one is meant to be *shared* — with a caregiver, a
+school, another device the user does not intend to fully clone — so it
+carries no internal id and matches an existing group by label rather than
+by id. *Why import always merges, never replaces or deletes:* a shared list
+received from someone else must not be able to wipe out groups/terms the
+receiving device already has; a group whose label already exists is reused
+(and its own `color`/`criticality` are never overwritten by the import) and
+a term that already exists (by `TextNormalizer`-normalised form, the same
+rule as manual entry, R4.1) is skipped rather than duplicated or
+overwritten. This is re-implemented directly against `AllergenGroupDao`/
+`AllergenTermDao` rather than calling the feature-layer
+`AllergenGroupActions`/`AllergenTermActions`, because `core/` must not
+import `features/` (§2).
+
+*The whole merge runs inside `AppDatabase.transaction`,* which is the one
+reason the service takes the `AppDatabase` rather than the two DAOs — every
+read and write still goes through a DAO, so no drift row or companion type
+reaches this layer. Without it a file that turned out to be malformed part-way
+through left a half-merged list behind, which for a shared allergy list is
+worse than importing nothing: the user sees "import failed" and still has
+some of the terms. One consequence: `AllergenGroupDao.watchAllWithTerms`
+cannot be used from inside the transaction, because a drift stream query
+registers itself on the database rather than on the enclosing transaction —
+hence the one-shot `getAllWithTerms()` twin (§2.9 in CLASS_DIAGRAM).
+
+*Skipped and rejected are separate counts* (REQUIREMENTS R8.7a). Reporting
+every cause as "already on your list" told the user an allergen was covered
+when the entry had in fact been dropped — a too-short term like "Ei" was the
+case that exposed it. For the same reason an unusable *group* header does not
+take its members down with it: the group is counted as rejected and its terms
+are imported ungrouped, because dropping an allergen silently is the one
+outcome this feature must never have. Every JSON field is read through a
+type-checking helper that returns `null` for the wrong type, so a hand-edited
+file produces a counted rejection rather than a raw `_TypeError` surfacing as
+"Import failed: type 'int' is not a subtype of type 'String?'"; over-long
+values are rejected the same way rather than reaching drift's length check as
+an `InvalidDataException`. Groups are created lazily, once a member term is
+known to be insertable, so an all-duplicate group leaves no empty group
+behind — while an entry that genuinely carries no terms still round-trips.
+
+*A term imported into a group adopts the group's active state, not the
+file's* (R4.1d): a group is one substance, so "a group is never partially
+active" has to survive an import too, or the group's single toggle ends up
+disagreeing with what is actually matched. Merging into an existing group
+adopts that group's current state; a brand-new group honours the file only
+when every member in it is inactive. An ungrouped term, which the user
+toggles individually, keeps the file's value.
+
+`AllergyListFormatException` carrying a sealed
+`AllergyListFormatProblem` (`AllergyListContentInvalid`,
+`AllergyListFormatTooNew`) mirrors `BackupFormatException`/
+`BackupFormatProblem` (§5.17) for the same reason: the service has no
+`BuildContext` to localise with, so `allergies_screen.dart` maps the problem
+to a string.
+
+*Rejected:* adding a "share as JSON" mode to `BackupService` itself (would
+need a second, incompatible meaning of "import" — merge vs. replace — behind
+one API), and matching imported groups by a carried-over id (would silently
+collide with an unrelated local group that happens to reuse an id from a
+different installation; label matching is visible and correctable by the
+user, an id collision is not).
+
+*Migration trap, confirmed via `migration_test.dart`, not assumed:*
+`Migrator.createTable` always builds a table from its table definition's
+*current* Dart shape, not a per-schema-version snapshot (this project hand-
+writes `onUpgrade` blocks rather than using `drift_dev`'s schema-snapshot
+codegen, §8). So the existing `if (from < 2)` block's
+`migrator.createTable(allergenGroups)` — written for the v1→v2 migration,
+long before `color`/`criticality` existed — now *also* creates those two
+columns, because it builds from today's table definition. Adding the new
+`if (from < 4) { addColumn(color); addColumn(criticality); }` block
+unconditionally would therefore fail a from-v1 upgrade with "duplicate
+column": the v1→v2 step already created them. The fix is guarding the new
+step to `if (from >= 2 && from < 4)`, so it only runs for an install that
+already has `allergen_groups` without these columns (a v2 or v3 database),
+never for one freshly created by the v1→v2 step in the same `onUpgrade`
+call. `migration_test.dart` now has a hand-built v2-shaped seed (table
+present, columns absent) specifically to exercise this guard, alongside the
+v1 and v3 seeds. Any future column added to `allergenGroups` needs the same
+"does an earlier `createTable` in this same `onUpgrade` already include it?"
+check — not just "add a migration block".
+
+### 5.19 Backup format 3: groups in the archive, a unique-constraint clash on restore, and refusing a downgrade
+
+*The gap §5.18 left open is closed.* The full ZIP backup now exports
+`allergen_groups` (id, label, color, criticality, timestamps) as its own
+`allergenGroups` list and `groupId` on every exported term, so a restore or a
+WebDAV sync no longer flattens every group — previously the table was never
+read at all and every term came back ungrouped (REQUIREMENTS R8.9).
+`backupFormatVersion` goes 2 → 3 for it. On import, groups are written before
+terms because `groupId` is a foreign key into them, and a term naming a group
+the archive does not carry is restored ungrouped rather than failing the whole
+import — the same defensive shape the scan/barcode restore already used (§5.5)
+rather than a new rule. A v1 or v2 archive simply has no `allergenGroups` key
+and no `groupId`, which the existing absent-key-reads-as-`null` pattern
+handles: it restores exactly as it was written.
+
+*The restore bug that only appears on a second device:* `allergen_terms` has
+`UNIQUE(normalized_term)` *besides* its primary key (R4.1), and drift's
+`insertOnConflictUpdate` targets only the primary key. Restoring an archive
+onto a device that already had the same term under a different uuid — the
+normal case for a replacement phone, and the only case a single-device test
+never reaches — therefore threw on the unique index and rolled the entire
+restore back. The fix deletes the clashing local row before inserting the
+archive's: history is unaffected, because `scan_matches.allergenTermId` is
+nullable `setNull` and every match keeps its `termSnapshot` (R4.7), so no past
+verdict changes. *Rejected:* upserting onto the normalised term instead
+(drift's `onConflict` target would then disagree with the archive's own ids,
+silently merging two genuinely different rows), and skipping the clashing
+term (the archive is the user's deliberate choice of what to restore; silently
+keeping the local row would make a restore unpredictable).
+
+*Settings that were exported but never written back:* `themeMode` and
+`disclaimerAcknowledgedAt` have been in the payload since v1 and were simply
+never restored, so the disclaimer gate reappeared after every restore.
+`certificateFingerprint` is new in v3, and had a sharper edge: `setWebdav`
+writes all three of its columns, so restoring without it *cleared* the pinned
+certificate — the one that made a self-signed WebDAV server reachable, i.e.
+restoring from sync broke sync.
+
+*A downgrade is refused, not silently applied.* Drift calls `onUpgrade` for a
+downgrade too, where every `if (from < N)` block is false: the old code did
+nothing and then stamped the older `schemaVersion` onto a newer database file.
+Re-installing the newer build would then re-run its `addColumn` steps against
+columns that already exist and never open the database again. `onUpgrade` now
+throws a `StateError` naming both versions while the data is still intact
+(REQUIREMENTS R4.13). *Rejected:* attempting an automatic down-migration —
+there is no inverse of a `createTable`/`addColumn` step that preserves the
+data the newer version wrote, so "reinstall the newer version, or restore from
+a backup" is the only honest answer.
+
+*A non-format error during a WebDAV restore no longer hangs the screen.*
+`BackupActions.restoreLatest` maps `BackupFormatException` only; anything else
+— a database error mid-restore, a disk failure — escaped `_restore` as an
+unhandled async error with `_busy` still true, i.e. a spinner forever and
+nothing told to the user. It is wrapped in a `try`/`catch` that reports
+through the same `_report` path as every other outcome (`syncRestoreFailed`).
+
+*The user's typed allergen term no longer reaches the log.*
+`TranslationService` logged the text it was translating on every failure
+path, and the log is shareable from Settings → App logs — an allergen name is
+exactly the personal data `PRIVACY.md` promises stays on the device. The log
+lines now carry only the language pair. This is the §5.17 "no user text in a
+layer that cannot localise it" line applied to logging: a log message is
+exempt from localisation, not from privacy.
 
 ---
 
@@ -696,15 +866,19 @@ Layout mirrors `lib/`:
 ```
 src/test/
 ├── calculators/  text_normalizer_test.dart, allergen_matcher_test.dart,
-│                 ingredient_marker_detector_test.dart
+│                 ingredient_marker_detector_test.dart,
+│                 spelling_variant_test.dart
 ├── database/     test_database.dart (in-memory factory + builders),
 │                 allergen_term_dao_test.dart, allergen_group_dao_test.dart,
 │                 product_dao_test.dart, scan_dao_test.dart,
-│                 settings_dao_test.dart, migration_test.dart (v1→v2)
+│                 settings_dao_test.dart, migration_test.dart (v1→v2,
+│                 v2→v3, v3→v4, downgrade refused)
 ├── services/     open_food_facts_service_test.dart (loopback HttpServer),
 │                 translation_service_test.dart (loopback HttpServer),
 │                 backup_service_test.dart (in-memory round trip, incl.
-│                 photo entries and v1-archive backward compatibility),
+│                 groups, photo entries and v1/v2-archive backward
+│                 compatibility),
+│                 allergy_list_json_service_test.dart (in-memory merge),
 │                 scan_photo_service_test.dart (real temp directory)
 ├── widgets/      highlighted_text_test.dart (pure segment-resolution logic)
 ├── features/     scan_actions_test.dart (reevaluate carries name/shop/photo
@@ -714,12 +888,16 @@ src/test/
 └── widget_test.dart   shell smoke test with every provider overridden
 ```
 
-`migration_test.dart` is the app's first real `onUpgrade` exercise
-(`schemaVersion` 1 → 2, §5.15/§5.16): it hand-builds a minimal, representative
-v1 database with raw SQL (column naming/types confirmed empirically against
-this project's real Drift/sqlite3 versions rather than assumed) and opens it
-through the real `AppDatabase`, rather than using drift_dev's schema-snapshot
-tooling, which needs a `build.yaml` scaffold this project doesn't have yet.
+`migration_test.dart` covers every `onUpgrade` step so far: v1 → v2
+(§5.15/§5.16, the app's first real one), v2 → v3 (§5.17's `appLanguage`) and
+v3 → v4 (§5.18's `color`/`criticality`, including the `from >= 2` guard — see
+§5.18's own migration-trap writeup), plus §5.19's refusal to open a database
+whose own version is newer than the build. Each hand-builds a minimal,
+representative database at its *starting* version with raw SQL (column
+naming/types confirmed empirically against this project's real Drift/sqlite3
+versions rather than assumed) and opens it through the real `AppDatabase`,
+rather than using drift_dev's schema-snapshot tooling, which needs a
+`build.yaml` scaffold this project doesn't have yet.
 
 Strategy:
 

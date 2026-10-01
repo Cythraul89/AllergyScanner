@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path/path.dart' as path_helper;
 import 'package:path_provider/path_provider.dart';
 
@@ -97,8 +98,11 @@ class BackupService {
 
   /// Version of the archive layout itself, independent of the schema
   /// version. v2 adds `name`/`shop`/`photoPath` to each scan row plus one
-  /// archive entry per attached photo.
-  static const int backupFormatVersion = 2;
+  /// archive entry per attached photo. v3 adds the `allergenGroups` list and
+  /// `groupId` on each term, so a restore no longer silently flattens every
+  /// group (R8.9), plus `certificateFingerprint` so a restore stops clearing
+  /// the pinned WebDAV certificate.
+  static const int backupFormatVersion = 3;
 
   static const String _dataEntry = 'data.json';
   static const String _manifestEntry = 'manifest.json';
@@ -167,7 +171,9 @@ class BackupService {
     return importFromBytes(await file.readAsBytes());
   }
 
-  /// Replaces the current content in one transaction.
+  /// Merges the archive into the current content in one transaction: rows are
+  /// upserted and the archive wins per row, but nothing local that the archive
+  /// does not mention is deleted.
   ///
   /// Throws [BackupFormatException] for an unusable archive; a partially
   /// applied import is impossible because everything runs inside the
@@ -250,6 +256,7 @@ class BackupService {
     // One transaction, so an export cannot capture a half-written scan.
     return _database.transaction(() async {
       final terms = await _database.select(_database.allergenTerms).get();
+      final groups = await _database.select(_database.allergenGroups).get();
       final products = await _database.select(_database.products).get();
       final scans = await _database.select(_database.scans).get();
       final matches = await _database.select(_database.scanMatches).get();
@@ -265,6 +272,19 @@ class BackupService {
                 'normalizedTerm': row.normalizedTerm,
                 'isActive': row.isActive,
                 'note': row.note,
+                'groupId': row.groupId,
+                'createdAt': row.createdAt.toUtc().toIso8601String(),
+                'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+              },
+            )
+            .toList(growable: false),
+        'allergenGroups': groups
+            .map(
+              (row) => <String, Object?>{
+                'id': row.id,
+                'label': row.label,
+                'color': row.color,
+                'criticality': row.criticality?.name,
                 'createdAt': row.createdAt.toUtc().toIso8601String(),
                 'updatedAt': row.updatedAt.toUtc().toIso8601String(),
               },
@@ -322,6 +342,7 @@ class BackupService {
         // Settings without any secret: the password stays in the key store.
         'settings': <String, Object?>{
           'themeMode': settings.themeMode.name,
+          'certificateFingerprint': settings.certificateFingerprint,
           'appLanguage': settings.appLanguage,
           'preferredIngredientsLanguage':
               settings.preferredIngredientsLanguage,
@@ -341,6 +362,37 @@ class BackupService {
       int imported = 0;
       int skipped = 0;
 
+      // Groups first: a term's groupId is a foreign key into this table.
+      // Absent in a v1/v2 archive, which simply leaves every term ungrouped —
+      // exactly the behaviour those archives were written with.
+      final Set<String> groupIds = <String>{};
+      for (final Map<String, Object?> row in _asRows(
+        payload['allergenGroups'],
+      )) {
+        final String? id = row['id'] as String?;
+        final String? label = row['label'] as String?;
+        if (id == null || label == null) {
+          skipped++;
+          continue;
+        }
+        groupIds.add(id);
+        await _database
+            .into(_database.allergenGroups)
+            .insertOnConflictUpdate(
+              AllergenGroupsCompanion(
+                id: Value(id),
+                label: Value(label),
+                color: Value(_asInt(row['color'])),
+                criticality: Value(
+                  _asNullableEnum(row['criticality'], GroupCriticality.values),
+                ),
+                createdAt: Value(_asDate(row['createdAt']) ?? _now()),
+                updatedAt: Value(_asDate(row['updatedAt']) ?? _now()),
+              ),
+            );
+        imported++;
+      }
+
       final List<Map<String, Object?>> termRows = _asRows(
         payload['allergenTerms'],
       );
@@ -354,6 +406,25 @@ class BackupService {
           continue;
         }
         termIds.add(id);
+
+        // allergen_terms has a UNIQUE(normalized_term) besides its primary
+        // key, and insertOnConflictUpdate only targets the primary key. The
+        // same term carrying a different uuid — the normal case when
+        // restoring onto a device that already has its own list — therefore
+        // used to throw and roll the whole restore back. Drop the local row
+        // first: scan_matches.allergenTermId is setNull and history keeps its
+        // termSnapshot (R4.7), so no past verdict changes.
+        final AllergenTermRow? clash =
+            await (_database.select(_database.allergenTerms)
+                  ..where((t) => t.normalizedTerm.equals(normalized)))
+                .getSingleOrNull();
+        if (clash != null && clash.id != id) {
+          await (_database.delete(
+            _database.allergenTerms,
+          )..where((t) => t.id.equals(clash.id))).go();
+        }
+
+        final String? groupId = row['groupId'] as String?;
         await _database
             .into(_database.allergenTerms)
             .insertOnConflictUpdate(
@@ -363,6 +434,13 @@ class BackupService {
                 normalizedTerm: Value(normalized),
                 isActive: Value(row['isActive'] as bool? ?? true),
                 note: Value(row['note'] as String?),
+                // Drop a reference to a group the archive doesn't carry,
+                // rather than failing the whole import on a foreign key.
+                groupId: Value(
+                  groupId != null && groupIds.contains(groupId)
+                      ? groupId
+                      : null,
+                ),
                 createdAt: Value(_asDate(row['createdAt']) ?? _now()),
                 updatedAt: Value(_asDate(row['updatedAt']) ?? _now()),
               ),
@@ -504,9 +582,24 @@ class BackupService {
         await _database.settingsDao.setRemoteLookupEnabled(
           values['remoteLookupEnabled'] as bool? ?? true,
         );
+        await _database.settingsDao.setThemeMode(
+          _asEnum(values['themeMode'], ThemeMode.values, ThemeMode.system),
+        );
+        // Exported since v1 but never restored, so the disclaimer reappeared
+        // after every restore.
+        final DateTime? acknowledgedAt = _asDate(
+          values['disclaimerAcknowledgedAt'],
+        );
+        if (acknowledgedAt != null) {
+          await _database.settingsDao.acknowledgeDisclaimer(acknowledgedAt);
+        }
         await _database.settingsDao.setWebdav(
           baseUrl: values['webdavBaseUrl'] as String?,
           username: values['webdavUsername'] as String?,
+          // setWebdav writes all three columns, so omitting this cleared the
+          // pinned certificate — which is what made the server reachable in
+          // the first place when restoring *from* WebDAV.
+          certificateFingerprint: values['certificateFingerprint'] as String?,
         );
       }
 
@@ -531,6 +624,14 @@ class BackupService {
   static int? _asInt(Object? value) {
     if (value is int) return value;
     if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  static T? _asNullableEnum<T extends Enum>(Object? value, List<T> values) {
+    if (value is! String) return null;
+    for (final T entry in values) {
+      if (entry.name == value) return entry;
+    }
     return null;
   }
 

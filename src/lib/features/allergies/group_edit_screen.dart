@@ -6,11 +6,29 @@ import '../../core/calculators/text_normalizer.dart';
 import '../../core/constants.dart';
 import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
+import '../../core/models/enums.dart';
 import '../../core/providers.dart';
 import '../../core/services/translation_service.dart';
+import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
 import 'allergen_group_providers.dart';
 import 'allergies_providers.dart';
+
+/// Fixed palette for a group's identification dot — simple, no color-picker
+/// dependency needed for a handful of swatches.
+const List<Color> kGroupColorPalette = <Color>[
+  Colors.red,
+  Colors.orange,
+  Colors.amber,
+  Colors.green,
+  Colors.teal,
+  Colors.blue,
+  Colors.indigo,
+  Colors.purple,
+  Colors.pink,
+  Colors.brown,
+  Colors.grey,
+];
 
 /// A name typed or suggested while adding a brand-new group, held only in
 /// widget state until Save — a new group is not written to the database a
@@ -53,6 +71,8 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
   String? _newTermError;
   String _newTermLanguage = 'en';
   Map<String, TranslationResult>? _suggestions;
+  Color? _color;
+  GroupCriticality? _criticality;
 
   /// Only populated while adding a brand-new group (§ typedef above).
   final List<_DraftMember> _draftMembers = <_DraftMember>[];
@@ -87,6 +107,8 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     if (!mounted) return;
     setState(() {
       _labelController.text = group?.label ?? '';
+      _color = group?.color;
+      _criticality = group?.criticality;
       _loading = false;
     });
   }
@@ -144,6 +166,10 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
             onChanged: (_) => setState(() => _labelError = null),
           ),
           const SizedBox(height: 24),
+          _buildColorPicker(l10n),
+          const SizedBox(height: 24),
+          _buildCriticalityPicker(l10n),
+          const SizedBox(height: 24),
           Text(
             l10n.groupMembersHeading,
             style: Theme.of(context).textTheme.titleSmall,
@@ -189,6 +215,63 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildColorPicker(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(l10n.groupColorLabel, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            ChoiceChip(
+              label: Text(l10n.groupColorNone),
+              selected: _color == null,
+              onSelected: (_) => setState(() => _color = null),
+            ),
+            for (final Color option in kGroupColorPalette)
+              _ColorSwatch(
+                color: option,
+                selected: _color?.toARGB32() == option.toARGB32(),
+                onTap: () => setState(() => _color = option),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCriticalityPicker(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          l10n.groupCriticalityLabel,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        DropdownButton<GroupCriticality?>(
+          value: _criticality,
+          hint: Text(l10n.groupCriticalityNone),
+          items: <DropdownMenuItem<GroupCriticality?>>[
+            DropdownMenuItem<GroupCriticality?>(
+              child: Text(l10n.groupCriticalityNone),
+            ),
+            for (final GroupCriticality c in GroupCriticality.values)
+              DropdownMenuItem<GroupCriticality?>(
+                value: c,
+                child: Text(Formatters.criticalityLabel(l10n, c)),
+              ),
+          ],
+          onChanged: (GroupCriticality? value) =>
+              setState(() => _criticality = value),
+        ),
+      ],
     );
   }
 
@@ -492,12 +575,21 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     );
     if (_isEditing) {
       await groupActions.rename(id: widget.groupId!, label: label);
+      await groupActions.setAppearance(
+        id: widget.groupId!,
+        color: _color,
+        criticality: _criticality,
+      );
       if (!mounted) return;
       context.pop();
       return;
     }
 
-    final String newGroupId = await groupActions.create(label: label);
+    final String newGroupId = await groupActions.create(
+      label: label,
+      color: _color,
+      criticality: _criticality,
+    );
     int skipped = 0;
     final AllergenTermActions termActions = ref.read(
       allergenTermActionsProvider,
@@ -542,6 +634,39 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     await ref.read(allergenGroupActionsProvider).delete(widget.groupId!);
     if (!mounted) return;
     context.pop();
+  }
+}
+
+class _ColorSwatch extends StatelessWidget {
+  const _ColorSwatch({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: CircleAvatar(
+        radius: 16,
+        backgroundColor: color,
+        child: selected
+            ? Icon(
+                Icons.check,
+                color: ThemeData.estimateBrightnessForColor(color) ==
+                        Brightness.dark
+                    ? Colors.white
+                    : Colors.black,
+              )
+            : null,
+      ),
+    );
   }
 }
 

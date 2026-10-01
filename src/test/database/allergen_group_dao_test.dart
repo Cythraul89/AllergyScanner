@@ -1,6 +1,9 @@
 import 'package:allergy_scanner/core/database/app_database.dart';
 import 'package:allergy_scanner/core/models/allergen_group.dart';
 import 'package:allergy_scanner/core/models/allergen_term.dart';
+import 'package:allergy_scanner/core/models/enums.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart' show Color, Colors;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'test_database.dart';
@@ -11,13 +14,19 @@ void main() {
   setUp(() => database = openTestDatabase());
   tearDown(() => database.close());
 
-  AllergenGroup group({String id = 'group-1', String label = 'Hazelnut'}) =>
-      AllergenGroup(
-        id: id,
-        label: label,
-        createdAt: testTimestamp,
-        updatedAt: testTimestamp,
-      );
+  AllergenGroup group({
+    String id = 'group-1',
+    String label = 'Hazelnut',
+    Color? color,
+    GroupCriticality? criticality,
+  }) => AllergenGroup(
+    id: id,
+    label: label,
+    color: color,
+    criticality: criticality,
+    createdAt: testTimestamp,
+    updatedAt: testTimestamp,
+  );
 
   test('AllergenGroupWithTerms.isActive is true for a group with no members yet', () {
     expect(
@@ -54,6 +63,55 @@ void main() {
       'group-1',
     );
     expect(found?.label, 'Hazelnut');
+  });
+
+  test('insertGroup stores color and criticality', () async {
+    await database.allergenGroupDao.insertGroup(
+      group(color: Colors.red, criticality: GroupCriticality.high),
+    );
+    final AllergenGroup? found = await database.allergenGroupDao.findById(
+      'group-1',
+    );
+    expect(found?.color?.toARGB32(), Colors.red.toARGB32());
+    expect(found?.criticality, GroupCriticality.high);
+  });
+
+  test('a group with no color/criticality round-trips as null', () async {
+    await database.allergenGroupDao.insertGroup(group());
+    final AllergenGroup? found = await database.allergenGroupDao.findById(
+      'group-1',
+    );
+    expect(found?.color, isNull);
+    expect(found?.criticality, isNull);
+  });
+
+  test('setAppearance is column-scoped and can clear both fields', () async {
+    await database.allergenGroupDao.insertGroup(group());
+    final DateTime later = testTimestamp.add(const Duration(days: 1));
+
+    await database.allergenGroupDao.setAppearance(
+      id: 'group-1',
+      color: const Value(Colors.blue),
+      criticality: const Value(GroupCriticality.medium),
+      updatedAt: later,
+    );
+    AllergenGroup? found = await database.allergenGroupDao.findById(
+      'group-1',
+    );
+    expect(found?.label, 'Hazelnut');
+    expect(found?.color?.toARGB32(), Colors.blue.toARGB32());
+    expect(found?.criticality, GroupCriticality.medium);
+    expect(found?.updatedAt.toUtc(), later);
+
+    await database.allergenGroupDao.setAppearance(
+      id: 'group-1',
+      color: const Value(null),
+      criticality: const Value(null),
+      updatedAt: later,
+    );
+    found = await database.allergenGroupDao.findById('group-1');
+    expect(found?.color, isNull);
+    expect(found?.criticality, isNull);
   });
 
   test('updateLabel is column-scoped', () async {
