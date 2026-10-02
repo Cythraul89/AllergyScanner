@@ -11,14 +11,11 @@ import '../../core/providers.dart';
 import '../../core/services/allergy_list_json_service.dart';
 import '../../core/services/translation_service.dart';
 
-/// Here rather than in `core/`: only the Allergies feature's screens read
-/// grouped-with-terms data — unlike `allAllergenTermsProvider`, which the
-/// scan flow and result view also need.
-
-final StreamProvider<List<AllergenGroupWithTerms>> allAllergenGroupsProvider =
-    StreamProvider<List<AllergenGroupWithTerms>>(
-      (ref) => ref.watch(allergenGroupDaoProvider).watchAllWithTerms(),
-    );
+/// Groups-with-terms used to live here, on the reasoning that only the
+/// Allergies screens needed it. The scan preview and the result view now draw
+/// allergen highlights in their group's colour too, so it moved to
+/// `core/providers.dart` as `allergenGroupsWithTermsProvider` — `core/` must
+/// not import `features/`.
 
 final StreamProvider<List<AllergenTerm>> ungroupedAllergenTermsProvider =
     StreamProvider<List<AllergenTerm>>(

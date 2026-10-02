@@ -477,6 +477,14 @@ Wireframes belong in `doc/SCREENS.md`; this section fixes the behaviour.
   read by the matcher or changes matching in any way (§5.3). When set, the
   Allergies screen shows the group's color as a leading dot and its
   criticality as a chip next to the group's label.
+- **R7.16a** Where a matched allergen is marked inside ingredient text, it is
+  marked in its group's color: the detected-section preview on the review
+  screen (R7.12) and the *Evaluated text* section of the result view (R7.5).
+  The result view's match list shows each found term's name in the same
+  color. A term that is ungrouped, or in a group with no color, keeps the
+  theme's error color, and a highlight is always bold as well as tinted, so
+  color never becomes the only signal that something matched (R7.4, §5.6).
+  The foreground is chosen per background so every swatch stays readable.
 - **R7.17** The Allergies screen's app bar offers *Export as JSON* and
   *Import from JSON* (§8.6–§8.8): export shares the written file through the
   platform share sheet, import picks a `.json` file through the system file

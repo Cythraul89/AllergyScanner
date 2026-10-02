@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart' show Locale, ThemeMode;
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/material.dart' show Color, Locale, ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -9,6 +10,7 @@ import 'database/daos/allergen_term_dao.dart';
 import 'database/daos/product_dao.dart';
 import 'database/daos/scan_dao.dart';
 import 'database/daos/settings_dao.dart';
+import 'models/allergen_group.dart';
 import 'models/allergen_term.dart';
 import 'models/app_settings.dart';
 import 'services/backup_service.dart';
@@ -120,6 +122,43 @@ final StreamProvider<List<AllergenTerm>> activeAllergenTermsProvider =
     StreamProvider<List<AllergenTerm>>(
       (ref) => ref.watch(allergenTermDaoProvider).watchActive(),
     );
+
+/// `termId` → the colour of the group that term belongs to (R7.16), for the
+/// inline highlighting of a matched allergen.
+///
+/// Here rather than in a feature: the scan review preview and the result view
+/// both draw it, and `core/` must not import `features/`. Terms that are
+/// ungrouped, or in a group with no colour picked, are simply absent — the
+/// caller falls back to the theme's error colour.
+final Provider<Map<String, Color>> allergenTermColorsProvider =
+    Provider<Map<String, Color>>((ref) {
+      final List<AllergenGroupWithTerms> groups =
+          ref.watch(allergenGroupsWithTermsProvider).value ??
+          const <AllergenGroupWithTerms>[];
+      return termColorsByGroup(groups);
+    });
+
+/// Pure half of [allergenTermColorsProvider], so the mapping is testable
+/// without a container.
+@visibleForTesting
+Map<String, Color> termColorsByGroup(List<AllergenGroupWithTerms> groups) {
+  final Map<String, Color> colors = <String, Color>{};
+  for (final AllergenGroupWithTerms group in groups) {
+    final Color? color = group.group.color;
+    if (color == null) continue;
+    for (final AllergenTerm term in group.terms) {
+      colors[term.id] = color;
+    }
+  }
+  return colors;
+}
+
+/// Groups with their members. Read by the Allergies screen and, through
+/// [allergenTermColorsProvider], by the scan and result views.
+final StreamProvider<List<AllergenGroupWithTerms>>
+allergenGroupsWithTermsProvider = StreamProvider<List<AllergenGroupWithTerms>>(
+  (ref) => ref.watch(allergenGroupDaoProvider).watchAllWithTerms(),
+);
 
 // ── Settings (read side) ────────────────────────────────────────────────────
 

@@ -119,7 +119,7 @@ class _GroupEditScreenState extends ConsumerState<GroupEditScreen> {
     final String? id = widget.groupId;
     if (id == null) return true;
     final List<AllergenGroupWithTerms> all =
-        ref.read(allAllergenGroupsProvider).valueOrNull ?? const [];
+        ref.read(allergenGroupsWithTermsProvider).valueOrNull ?? const [];
     return _groupIsActive(all, id);
   }
 
@@ -678,7 +678,7 @@ class _MemberList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<AllergenGroupWithTerms>> groups = ref.watch(
-      allAllergenGroupsProvider,
+      allergenGroupsWithTermsProvider,
     );
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     return groups.when(
@@ -745,7 +745,7 @@ class _AttachExistingTerm extends ConsumerWidget {
             // cascade reflects its pre-existing members, not the just-moved
             // term's own (possibly different) prior state.
             final List<AllergenGroupWithTerms> all =
-                ref.read(allAllergenGroupsProvider).valueOrNull ?? const [];
+                ref.read(allergenGroupsWithTermsProvider).valueOrNull ?? const [];
             final bool groupActive = _groupIsActive(all, groupId);
             final AllergenTermActions actions = ref.read(
               allergenTermActionsProvider,

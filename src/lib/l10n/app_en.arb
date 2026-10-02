@@ -124,6 +124,7 @@
   "resultMayContain": "May contain",
   "resultDeclarationsNote": "These declarations are shown for information. They are not matched against your list.",
   "resultEvaluatedTextTitle": "Evaluated text",
+  "resultNormalisedTextNote": "Shown as it was checked: lower case, with punctuation and line breaks flattened.",
   "resultNoTextAvailable": "No ingredient text was available.",
   "resultCorrectProductAction": "Correct product data",
   "resultEditDetailsAction": "Edit details",

@@ -93,6 +93,7 @@
   "resultMayContain": "Kann enthalten",
   "resultDeclarationsNote": "Diese Angaben dienen nur zur Information. Sie werden nicht mit deiner Liste abgeglichen.",
   "resultEvaluatedTextTitle": "Geprüfter Text",
+  "resultNormalisedTextNote": "So dargestellt, wie geprüft wurde: Kleinschreibung, Satzzeichen und Zeilenumbrüche vereinheitlicht.",
   "resultNoTextAvailable": "Es war kein Zutatentext verfügbar.",
   "resultCorrectProductAction": "Produktdaten korrigieren",
   "resultEditDetailsAction": "Details bearbeiten",

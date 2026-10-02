@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/allergen_group.dart';
 import '../../core/models/allergen_term.dart';
+import '../../core/providers.dart';
 import '../../core/services/allergy_list_json_service.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/empty_view.dart';
@@ -32,7 +33,7 @@ class _AllergiesScreenState extends ConsumerState<AllergiesScreen> {
   @override
   Widget build(BuildContext context) {
     final AsyncValue<List<AllergenGroupWithTerms>> groups = ref.watch(
-      allAllergenGroupsProvider,
+      allergenGroupsWithTermsProvider,
     );
     final AsyncValue<List<AllergenTerm>> ungrouped = ref.watch(
       ungroupedAllergenTermsProvider,

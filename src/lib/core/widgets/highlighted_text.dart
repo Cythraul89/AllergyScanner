@@ -2,19 +2,29 @@ import 'package:flutter/material.dart';
 
 /// One `[start, end)` span of [HighlightedText.text] to mark.
 class TextHighlightRange {
-  const TextHighlightRange({required this.start, required this.end, this.label});
+  const TextHighlightRange({
+    required this.start,
+    required this.end,
+    this.label,
+    this.color,
+  });
 
   final int start;
   final int end;
 
   /// Unused for rendering today — carried through for a future tooltip.
   final String? label;
+
+  /// Background to mark this span with — the colour of the allergen group the
+  /// matched term belongs to (R7.16). `null` falls back to the theme's error
+  /// container, which is what every match looked like before groups could
+  /// carry a colour.
+  final Color? color;
 }
 
 /// Renders [text] with [highlights] shown inline, bold plus a background
-/// tint — never colour alone (R7.4). The first `RichText`/`TextSpan`
-/// highlighting in this codebase; `scan_result_screen.dart` only ever shows
-/// separate plain-text context excerpts.
+/// tint — never colour alone (R7.4), so a group colour only ever adds
+/// information and never becomes the sole carrier of "this is a match".
 class HighlightedText extends StatelessWidget {
   const HighlightedText({
     required this.text,
@@ -29,27 +39,43 @@ class HighlightedText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     final TextStyle base = style ?? DefaultTextStyle.of(context).style;
-    final TextStyle highlightStyle = base.copyWith(
-      fontWeight: FontWeight.bold,
-      backgroundColor: Theme.of(context).colorScheme.errorContainer,
-      color: Theme.of(context).colorScheme.onErrorContainer,
-    );
-    final List<({String text, bool highlighted})> segments =
+    final List<({String text, bool highlighted, Color? color})> segments =
         resolveHighlightSegments(text, highlights);
     return SelectableText.rich(
       TextSpan(
         children: <InlineSpan>[
-          for (final ({String text, bool highlighted}) segment in segments)
+          for (final ({String text, bool highlighted, Color? color}) segment
+              in segments)
             TextSpan(
               text: segment.text,
-              style: segment.highlighted ? highlightStyle : base,
+              style: segment.highlighted
+                  ? base.copyWith(
+                      fontWeight: FontWeight.bold,
+                      backgroundColor: segment.color ?? scheme.errorContainer,
+                      color: segment.color == null
+                          ? scheme.onErrorContainer
+                          : foregroundOn(segment.color!),
+                    )
+                  : base,
             ),
         ],
       ),
     );
   }
 }
+
+/// Black or white, whichever stays readable on [background].
+///
+/// A group colour is picked from a fixed palette that spans very light
+/// (amber) to very dark (indigo), so a single fixed foreground would be
+/// illegible on one end of it.
+@visibleForTesting
+Color foregroundOn(Color background) =>
+    ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+    ? Colors.white
+    : Colors.black;
 
 /// Splits [text] into alternating highlighted/unhighlighted segments from
 /// [ranges]. Pure so it is unit-testable without a widget pump.
@@ -61,7 +87,7 @@ class HighlightedText extends StatelessWidget {
 /// against overlaps between different terms (e.g. "milk" inside "milk
 /// powder"). Inline rendering is the first place that can actually break.
 @visibleForTesting
-List<({String text, bool highlighted})> resolveHighlightSegments(
+List<({String text, bool highlighted, Color? color})> resolveHighlightSegments(
   String text,
   List<TextHighlightRange> ranges,
 ) {
@@ -70,6 +96,7 @@ List<({String text, bool highlighted})> resolveHighlightSegments(
         (TextHighlightRange r) => TextHighlightRange(
           start: r.start.clamp(0, text.length),
           end: r.end.clamp(0, text.length),
+          color: r.color,
         ),
       )
       .where((TextHighlightRange r) => r.end > r.start)
@@ -82,27 +109,33 @@ List<({String text, bool highlighted})> resolveHighlightSegments(
     accepted.add(range);
   }
 
-  final List<({String text, bool highlighted})> segments =
-      <({String text, bool highlighted})>[];
+  final List<({String text, bool highlighted, Color? color})> segments =
+      <({String text, bool highlighted, Color? color})>[];
   int cursor = 0;
   for (final TextHighlightRange range in accepted) {
     if (range.start > cursor) {
       segments.add((
         text: text.substring(cursor, range.start),
         highlighted: false,
+        color: null,
       ));
     }
     segments.add((
       text: text.substring(range.start, range.end),
       highlighted: true,
+      color: range.color,
     ));
     cursor = range.end;
   }
   if (cursor < text.length) {
-    segments.add((text: text.substring(cursor), highlighted: false));
+    segments.add((
+      text: text.substring(cursor),
+      highlighted: false,
+      color: null,
+    ));
   }
   if (segments.isEmpty) {
-    segments.add((text: text, highlighted: false));
+    segments.add((text: text, highlighted: false, color: null));
   }
   return segments;
 }

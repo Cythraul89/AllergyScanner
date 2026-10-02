@@ -422,7 +422,11 @@ evaluated text on the right; action buttons in the app bar.
   `Corrected by you` / `Recognised text` / `Typed text` [R7.5].
 - `Declared by` = `allergensTags`, `May contain` = `tracesTags` — displayed,
   **not** matched [§5.4].
-- `▸ Evaluated text` expands the exact text that was matched.
+- `▸ Evaluated text` expands the text that was matched, with every match
+  highlighted in its group's color [R7.16a]. It shows the *normalised*
+  form — lower case, punctuation and line breaks flattened — because the
+  stored match offsets index into that string [R5.4]; a note under it says
+  so. Match names in the list above use the same color.
 - Buttons: *Correct product data* (barcode scans only) and *New scan*.
 - `⋮`: *Share result as text* — which includes the disclaimer line — and
   *Delete this scan*. Pre-filling a new term from a text selection is a

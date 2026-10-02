@@ -15,6 +15,7 @@ import '../../core/providers.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/scan_capabilities.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/highlighted_text.dart';
 import '../../core/widgets/verdict_banner.dart';
 import '../../l10n/app_localizations.dart';
 import '../history/history_providers.dart';
@@ -141,6 +142,7 @@ class _ResultBody extends ConsumerWidget {
       result.matches,
       allTerms,
     );
+    final Map<String, Color> termColors = ref.watch(allergenTermColorsProvider);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -182,7 +184,12 @@ class _ResultBody extends ConsumerWidget {
                   Text(
                     bucket.first.termSnapshot,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.error,
+                      // The group's own colour when it has one, so a match
+                      // here and the same match highlighted in the evaluated
+                      // text below read as the same thing (R7.16).
+                      color:
+                          termColors[bucket.first.allergenTermId] ??
+                          theme.colorScheme.error,
                     ),
                   ),
                   // The surrounding text is shown so a false positive such as
@@ -238,12 +245,41 @@ class _ResultBody extends ConsumerWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: SelectableText(
-                scan.evaluatedText.isEmpty
-                    ? l10n.resultNoTextAvailable
-                    : scan.evaluatedText,
-                style: theme.textTheme.bodySmall,
-              ),
+              child: scan.evaluatedText.isEmpty
+                  ? SelectableText(
+                      l10n.resultNoTextAvailable,
+                      style: theme.textTheme.bodySmall,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        // The normalised form, not scan.evaluatedText: the
+                        // stored match offsets index into it (R5.4), so this
+                        // is the only string a highlight can be placed on
+                        // without recomputing the match.
+                        HighlightedText(
+                          text: normalized,
+                          highlights: result.matches
+                              .map(
+                                (ScanMatch m) => TextHighlightRange(
+                                  start: m.startOffset,
+                                  end: m.endOffset,
+                                  label: m.termSnapshot,
+                                  color: termColors[m.allergenTermId],
+                                ),
+                              )
+                              .toList(growable: false),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.resultNormalisedTextNote,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),

@@ -156,7 +156,7 @@ class _NoMarkerWarning extends StatelessWidget {
   }
 }
 
-class _DetectedSectionPreview extends StatelessWidget {
+class _DetectedSectionPreview extends ConsumerWidget {
   const _DetectedSectionPreview({
     required this.marker,
     required this.activeTerms,
@@ -166,11 +166,12 @@ class _DetectedSectionPreview extends StatelessWidget {
   final List<AllergenTerm> activeTerms;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final MatchOutcome outcome = AllergenMatcher.match(
       text: marker.sectionText,
       activeTerms: activeTerms,
     );
+    final Map<String, Color> termColors = ref.watch(allergenTermColorsProvider);
     final ThemeData theme = Theme.of(context);
     final AppLocalizations l10n = AppLocalizations.of(context)!;
 
@@ -200,6 +201,7 @@ class _DetectedSectionPreview extends StatelessWidget {
                       start: m.startOffset,
                       end: m.endOffset,
                       label: m.term,
+                      color: termColors[m.termId],
                     ),
                   )
                   .toList(growable: false),
